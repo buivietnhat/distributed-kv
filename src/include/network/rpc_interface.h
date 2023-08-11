@@ -13,6 +13,8 @@ class ClientEnd {
 
   virtual std::optional<raft::AppendEntryReply> AppendEntries(const raft::AppendEntryArgs &args) const = 0;
 
+  virtual std::optional<int> Test(int input) const = 0;
+
   virtual void Terminate() = 0;
 
   virtual ~ClientEnd() = default;
