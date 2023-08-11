@@ -3,9 +3,9 @@ project(distributedkv)
 
 set(CMAKE_CXX_STANDARD 20)
 
-if(NOT KV_SANITIZER)
+if (NOT KV_SANITIZER)
     set(KV_SANITIZER address)
-endif()
+endif ()
 
 message("Build mode: ${CMAKE_BUILD_TYPE}")
 message("${KV_SANITIZER} sanitizer enabled in debug mode.")
@@ -55,7 +55,11 @@ message(STATUS "[FOUND] TBB ${TBB_VERSION}")
 set(DISTRIBUTEDKV_SRC_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/src/include)
 set(DISTRIBUTEDKV_TEST_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/test/include)
 
-include_directories(${DISTRIBUTEDKV_SRC_INCLUDE_DIR} ${DISTRIBUTEDKV_TEST_INCLUDE_DIR} ${PROJECT_SOURCE_DIR}/third_party/fmt/include)
+include_directories(
+        ${DISTRIBUTEDKV_SRC_INCLUDE_DIR}
+        ${DISTRIBUTEDKV_TEST_INCLUDE_DIR}
+        ${PROJECT_SOURCE_DIR}/third_party/fmt/include
+)
 
 enable_testing()
 

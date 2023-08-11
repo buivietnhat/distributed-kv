@@ -9,9 +9,11 @@
 #include <unordered_map>
 #include <variant>
 
+#include "common/container/channel.h"
 #include "common/container/concurrent_blocking_queue.h"
 #include "common/macros.h"
 #include "common/util.h"
+#include "fmt/format.h"
 #include "network/rpc_interface.h"
 #include "raft/raft.h"
 #include "raft/voter.h"
@@ -20,20 +22,24 @@ using namespace std::chrono_literals;
 
 namespace kv::network {
 
-using RequestArgs = std::variant<raft::RequestVoteArgs, raft::AppendEntryArgs>;
-using ReplyMessage = std::variant<raft::RequestVoteReply, raft::AppendEntryReply>;
+using RequestArgs = std::variant<int, raft::RequestVoteArgs, raft::AppendEntryArgs>;
+using ReplyArgs = std::variant<int, raft::RequestVoteReply, raft::AppendEntryReply>;
 
-enum class Method : uint8_t { RESERVERD, REQUEST_VOTE, APPEND_ENTRIES };
+enum class Method : uint8_t { RESERVERD, TEST, REQUEST_VOTE, APPEND_ENTRIES };
+
+struct ReplyMessage {
+  bool ok_{false};
+  ReplyArgs args_;
+};
 
 struct RequestMessage {
   std::string endname_;
   Method method_;
   RequestArgs args_;
-  common::ConcurrentBlockingQueue<ReplyMessage> *rep_queue_;
+  common::Channel<ReplyMessage> *chan_;
 
-  RequestMessage(std::string endname, Method method, RequestArgs args,
-                 common::ConcurrentBlockingQueue<ReplyMessage> *rep_queue)
-      : endname_(std::move(endname)), method_(method), args_(std::move(args)), rep_queue_(rep_queue) {}
+  RequestMessage(std::string endname, Method method, RequestArgs args, common::Channel<ReplyMessage> *chan)
+      : endname_(std::move(endname)), method_(method), args_(std::move(args)), chan_(chan) {}
 
   RequestMessage() = default;
 };
@@ -43,25 +49,38 @@ struct Server {
 
   std::mutex mu_;
   raft::Raft *raft_;
+  int count_{0};  // incoming RPCs
 
   void AddRaft(raft::Raft *raft) {
     std::lock_guard lock(mu_);
     raft_ = raft;
   }
 
+  int GetCount() const { return count_; }
+
   ReplyMessage DispatchReq(const RequestMessage &req) {
+    count_ += 1;
     switch (req.method_) {
       case REQUEST_VOTE: {
         if (raft_ == nullptr) {
           throw std::runtime_error("unknown raft service, expecting one");
         }
-        return raft_->RequestVote(std::get<raft::RequestVoteArgs>(req.args_));
+        auto rep = raft_->RequestVote(std::get<raft::RequestVoteArgs>(req.args_));
+        return {true, std::move(rep)};
       }
       case APPEND_ENTRIES: {
         if (raft_ == nullptr) {
           throw std::runtime_error("unknown raft service, expecting one");
         }
-        return raft_->AppendEntries(std::get<raft::AppendEntryArgs>(req.args_));
+        auto rep = raft_->AppendEntries(std::get<raft::AppendEntryArgs>(req.args_));
+        return {true, std::move(rep)};
+      }
+      case TEST: {
+        if (raft_ == nullptr) {
+          throw std::runtime_error("unknown raft service, expecting one");
+        }
+        auto rep = raft_->Test(std::get<int>(req.args_));
+        return {true, std::move(rep)};
       }
       default:
         return {};
@@ -71,8 +90,7 @@ struct Server {
 
 class MockingClientEnd : public ClientEnd {
  public:
-  MockingClientEnd(std::string name, common::ConcurrentBlockingQueue<RequestMessage> &queue)
-      : endname_(std::move(name)), msg_queue_(queue) {}
+  MockingClientEnd(std::string name, common::Channel<RequestMessage> &chan) : endname_(std::move(name)), chan_(chan) {}
 
   std::optional<raft::RequestVoteReply> RequestVote(const raft::RequestVoteArgs &args) const override {
     // entire Network has been destroyed
@@ -80,14 +98,13 @@ class MockingClientEnd : public ClientEnd {
       return {};
     }
 
-    common::ConcurrentBlockingQueue<ReplyMessage> rep_queue;
-    RequestMessage req_msg{endname_, REQUEST_VOTE, args, &rep_queue};
-    msg_queue_.Enqueue(req_msg);
+    common::Channel<ReplyMessage> chan;
+    RequestMessage req_msg{endname_, REQUEST_VOTE, args, &chan};
+    chan_.Send(req_msg);
 
-    ReplyMessage reply;
-    req_msg.rep_queue_->Dequeue(&reply);
-    if (std::holds_alternative<raft::RequestVoteReply>(reply)) {
-      return std::get<raft::RequestVoteReply>(reply);
+    auto reply = req_msg.chan_->Receive();
+    if (reply.ok_) {
+      return std::get<raft::RequestVoteReply>(reply.args_);
     }
 
     return {};
@@ -99,14 +116,31 @@ class MockingClientEnd : public ClientEnd {
       return {};
     }
 
-    common::ConcurrentBlockingQueue<ReplyMessage> rep_queue;
-    RequestMessage req_msg{endname_, APPEND_ENTRIES, args, &rep_queue};
-    msg_queue_.Enqueue(req_msg);
+    common::Channel<ReplyMessage> chan;
+    RequestMessage req_msg{endname_, APPEND_ENTRIES, args, &chan};
+    chan_.Send(req_msg);
 
-    ReplyMessage reply;
-    req_msg.rep_queue_->Dequeue(&reply);
-    if (std::holds_alternative<raft::AppendEntryReply>(reply)) {
-      return std::get<raft::AppendEntryReply>(reply);
+    auto reply = req_msg.chan_->Receive();
+    if (reply.ok_) {
+      return std::get<raft::AppendEntryReply>(reply.args_);
+    }
+
+    return {};
+  }
+
+  std::optional<int> Test(int input) const override {
+    // entire Network has been destroyed
+    if (finished_) {
+      return {};
+    }
+
+    common::Channel<ReplyMessage> chan;
+    RequestMessage req_msg{endname_, TEST, input, &chan};
+    chan_.Send(req_msg);
+
+    auto reply = req_msg.chan_->Receive();
+    if (reply.ok_) {
+      return std::get<int>(reply.args_);
     }
 
     return {};
@@ -118,7 +152,7 @@ class MockingClientEnd : public ClientEnd {
   using enum Method;
 
   std::string endname_;
-  common::ConcurrentBlockingQueue<RequestMessage> &msg_queue_;
+  common::Channel<RequestMessage> &chan_;
   bool finished_{false};
 };
 
@@ -167,7 +201,7 @@ class Network {
       throw std::runtime_error(fmt::format("Make end: {} already exists", endname));
     }
 
-    auto end = std::make_unique<MockingClientEnd>(endname, msg_queue_);
+    auto end = std::make_unique<MockingClientEnd>(endname, chan_);
     ends_[endname] = std::move(end);
     enabled_[endname] = false;
     connections_[endname] = "";
@@ -182,30 +216,31 @@ class Network {
       ShutdownClientEnds();
 
       // enqueue an empty message to wake up the dispatching thread
-      msg_queue_.Enqueue({});
+      chan_.Close();
       dp_thread_.join();
     }
   }
 
+  int GetCount(const std::string &servername) const { return servers_.at(servername)->GetCount(); }
+
  private:
   void DispatchRequests() {
     while (!finished_) {
-      RequestMessage req;
-      msg_queue_.Dequeue(&req);
+      auto req = chan_.Receive();
 
-      if (req.rep_queue_ == nullptr) {
+      if (req.chan_ == nullptr) {
         continue;
       }
-      ProcessRequest(req);
+      std::thread([&, req = std::move(req)] { ProcessRequest(req); }).detach();
     }
-    // drain all the queueing requests, ask as the server has been killed
-    while (!msg_queue_.Empty()) {
-      RequestMessage req;
-      msg_queue_.Dequeue(&req);
-      if (req.rep_queue_ != nullptr) {
-        req.rep_queue_->Enqueue({});
-      }
-    }
+    //    // drain all the queueing requests, ask as the server has been killed
+    //    while (!msg_queue_.Empty()) {
+    //      RequestMessage req;
+    //      msg_queue_.Dequeue(&req);
+    //      if (req.rep_queue_ != nullptr) {
+    //        req.rep_queue_->Enqueue({});
+    //      }
+    //    }
   }
 
   void ShutdownClientEnds() {
@@ -214,9 +249,9 @@ class Network {
     }
   }
 
-  void ProcessRequest(const RequestMessage &req) {
+  void ProcessRequest(RequestMessage req) {
     bool enable, reliable, longreordering;
-    std::string servername("");
+    std::string servername;
     auto *server = ReadEndnameInfo(req.endname_, &enable, &servername, &reliable, &longreordering);
 
     if (enable && servername != "" && server != nullptr) {
@@ -228,7 +263,7 @@ class Network {
 
       if (!reliable && (common::RandInt() % 1000 < 100)) {
         // drop the request, return as if timeout
-        req.rep_queue_->Enqueue({});
+        req.chan_->Send({});
         return;
       }
 
@@ -236,41 +271,44 @@ class Network {
       // we can periodically check if the server has been killed and the RPC should
       // get a failure reply
       ReplyMessage reply;
-      bool reply_ok{false};
-      bool is_server_dead{false};
+      auto reply_ok = std::make_shared<bool>(false);
+      auto is_server_dead = std::make_shared<bool>(false);
 
-      auto dp_fut = std::async(std::launch::async, [&] {
+      std::thread([&, reply_ok] {
         reply = server->DispatchReq(req);
-        reply_ok = true;
-      });
+        *reply_ok = true;
+      }).detach();
 
-      auto timer_fut = std::async(std::launch::async, [&] {
-        while (!reply_ok) {
+      std::thread([&, reply_ok, is_server_dead] {
+        while (!(*reply_ok)) {
           std::this_thread::sleep_for(100ms);
-          is_server_dead = IsServerDead(req.endname_, servername, server);
-          if (is_server_dead) {
+          if (*reply_ok) {
+            return;
+          }
+          *is_server_dead = IsServerDead(req.endname_, servername, server);
+          if (*is_server_dead) {
             return;
           }
         }
-      });
+      }).detach();
 
       // wait until we have a reply or server is dead
-      while (reply_ok == false && is_server_dead == false) {
+      while (*reply_ok == false && *is_server_dead == false) {
       }
 
-      if (reply_ok == false || is_server_dead == true) {
+      if (*reply_ok == false || *is_server_dead == true) {
         // server was killed while we were waiting; return error
-        req.rep_queue_->Enqueue({});
+        req.chan_->Send({});
       } else if (reliable == false && (common::RandInt() % 1000) < 100) {
         // drop the reply, return as if timeout
-        req.rep_queue_->Enqueue({});
+        req.chan_->Send({});
       } else if (longreordering == true && common::RandNInt(900) < 600) {
         // delay the response for a while
         auto ms = 200 + common::RandNInt(1 + common::RandNInt(2000));
         std::this_thread::sleep_for(std::chrono::milliseconds(ms));
-        req.rep_queue_->Enqueue(reply);
+        req.chan_->Send(reply);
       } else {
-        req.rep_queue_->Enqueue(reply);
+        req.chan_->Send(reply);
       }
     } else {
       // simulate no reply and eventual timeout
@@ -281,7 +319,7 @@ class Network {
         ms = common::RandInt() % 100;
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(ms));
-      req.rep_queue_->Enqueue({});
+      req.chan_->Send({});
     }
   }
 
@@ -317,7 +355,7 @@ class Network {
   std::unordered_map<std::string, bool> enabled_;
   std::unordered_map<std::string, std::unique_ptr<Server>> servers_;
   std::unordered_map<std::string, std::string> connections_;  // endname -> server name
-  common::ConcurrentBlockingQueue<RequestMessage> msg_queue_;
+  common::Channel<RequestMessage> chan_;
   std::thread dp_thread_;
   bool finished_{false};
 };

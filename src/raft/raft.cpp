@@ -27,7 +27,7 @@ RequestVoteReply Raft::RequestVote(const RequestVoteArgs &args) {
   std::unique_lock l(mu_);
   if (args.term_ < term_) {
     Logger::Debug(kDDrop, me_,
-                  fmt::format("Drop request vote from S%{} since its term {} is smaller than mine {}", args.candidate_,
+                  fmt::format("Drop request vote from S{} since its term {} is smaller than mine {}", args.candidate_,
                               args.term_, term_));
     reply.vote_granted_ = false;
     reply.term_ = term_;

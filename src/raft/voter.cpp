@@ -78,6 +78,8 @@ std::optional<VoteResult> Voter::DoRequestVote(std::shared_ptr<InternalState> st
     result.vote_granted_ = reply->vote_granted_;
     result.server_ = server;
     return result;
+  } else {
+    Logger::Debug(kDInfo, me_, fmt::format("Couldn't send vote request to server {}", server));
   }
 
   return {};
@@ -94,7 +96,6 @@ std::pair<bool, int> Voter::AttemptElection(std::shared_ptr<InternalState> state
   // never give up :)
   TryAgain();
 
-  //  auto cond = std::make_shared<std::condition_variable>();
   auto done = std::make_shared<bool>(false);
   auto vote_channel = std::make_shared<common::ConcurrentBlockingQueue<VoteResult>>();
 

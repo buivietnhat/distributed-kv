@@ -78,6 +78,8 @@ class Raft {
  public:
   using enum Role;
 
+  Raft() = default;
+
   Raft(std::vector<network::ClientEnd *> peers, uint32_t me, storage::PersistentInterface *persister,
        std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>> apply_channel);
 
@@ -86,6 +88,10 @@ class Raft {
   AppendEntryReply AppendEntries(const AppendEntryArgs &args);
 
   RaftState GetState() const;
+
+  int Test(int input) {
+    return input + 100;
+  }
 
   inline void Kill() {
     dead_ = true;
