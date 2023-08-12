@@ -78,8 +78,6 @@ std::optional<VoteResult> Voter::DoRequestVote(std::shared_ptr<InternalState> st
     result.vote_granted_ = reply->vote_granted_;
     result.server_ = server;
     return result;
-  } else {
-    Logger::Debug(kDInfo, me_, fmt::format("Couldn't send vote request to server {}", server));
   }
 
   return {};
@@ -101,7 +99,19 @@ std::pair<bool, int> Voter::AttemptElection(std::shared_ptr<InternalState> state
 
   for (size_t server = 0; server < peers_.size(); server++) {
     if (server != me_) {
-      group_.run([&, state = state, server = server, done = done, chan = vote_channel] {
+      //      group_.run([&, state = state, server = server, done = done, chan = vote_channel] {
+      //        auto vote_result = DoRequestVote(state, server);
+      //        if (*done) {
+      //          return;
+      //        }
+      //        if (vote_result) {
+      //          chan->Enqueue(*vote_result);
+      //        } else {
+      //          chan->Enqueue({});
+      //        }
+      //      });
+
+      std::thread([&, state, server, done, chan = vote_channel] {
         auto vote_result = DoRequestVote(state, server);
         if (*done) {
           return;
@@ -111,7 +121,7 @@ std::pair<bool, int> Voter::AttemptElection(std::shared_ptr<InternalState> state
         } else {
           chan->Enqueue({});
         }
-      });
+      }).detach();
     }
   }
 

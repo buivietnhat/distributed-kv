@@ -95,7 +95,6 @@ TEST(NetworkTest, TestConcurrentMany) {
   auto n = rn.GetCount("1000");
 
   EXPECT_EQ(total, n);
-
 }
 
 TEST(NetworkTest, TestUnreliable) {
@@ -180,7 +179,6 @@ TEST(NetworkTest, TestConcurrentOne) {
   auto n = rn.GetCount("1000");
   EXPECT_EQ(n, nrpcs);
 }
-
 
 // regression: an RPC that's delayed during Enabled=false
 // should not delay subsequent RPCs (e.g. after Enabled=true).
@@ -278,10 +276,10 @@ TEST(NetworkTest, DISABLED_TestKilled) {
     ok = true;
   }).detach();
 
-//  ch.Receive();
-//  if (!ok) {
-//    FAIL() << "Handle should not have returned yet";
-//  }
+  //  ch.Receive();
+  //  if (!ok) {
+  //    FAIL() << "Handle should not have returned yet";
+  //  }
 
   rn.DeleteServer("server99");
   ok = true;

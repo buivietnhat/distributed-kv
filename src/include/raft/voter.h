@@ -1,7 +1,7 @@
 #pragma once
 
-#include <tbb/task_group.h>
 #include <tbb/task_arena.h>
+#include <tbb/task_group.h>
 
 #include <mutex>
 

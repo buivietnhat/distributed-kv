@@ -51,8 +51,37 @@ TEST(RaftVoteTest, ReElection) {
   cfg.Disconnect(leader1);
   EXPECT_NE(-1, cfg.CheckOneLeader());
 
+  // if the old leader rejoins, that shouldn't
+  // disturb the new leader. and the old leader
+  // should switch to follower.
+  Logger::Debug(kDTest, -1, fmt::format("Connect with Leader {}", leader1));
+  cfg.Connect(leader1);
+  auto leader2 = cfg.CheckOneLeader();
+  EXPECT_NE(-1, leader2);
 
-//  EXPECT_TRUE(cfg.Cleanup());
+  // if there's no quorum, no new leader should
+  // be elected.
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Leader {}", leader2));
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Leader {}", (leader2 + 1) % servers));
+  cfg.Disconnect(leader2);
+  cfg.Disconnect((leader2 + 1) % servers);
+  common::SleepMs(2 * RAFT_ELECTION_TIMEOUT);
+
+  // check that the one connected server
+  // does not think it is the leader.
+  EXPECT_TRUE(cfg.CheckNoLeader());
+
+  // if a quorum arises, it should elect a leader.
+  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", (leader2 + 1) % servers));
+  cfg.Connect((leader2 + 1) % servers);
+  EXPECT_NE(-1, cfg.CheckOneLeader());
+
+  // re-join of last node shouldn't prevent leader from existing
+  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", leader2));
+  cfg.Connect(leader2);
+  EXPECT_NE(-1, cfg.CheckOneLeader());
+
+  EXPECT_TRUE(cfg.Cleanup());
 }
 
 }  // namespace kv::raft

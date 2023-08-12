@@ -44,7 +44,9 @@ void Raft::BroadcastHeartBeats() {
 
     for (uint32_t server = 0; server < peers_.size(); server++) {
       if (server != me_) {
-        group_.run([&, server = server, term = term] { SendHeartBeat(server, term); });
+        //        Logger::Debug(kDInfo, me_, fmt::format("About send HB for server {}", server));
+        //        group_.run([&, server = server, term = term] { SendHeartBeat(server, term); });
+        std::thread([&, server = server, term = term] { SendHeartBeat(server, term); }).detach();
       }
     }
 

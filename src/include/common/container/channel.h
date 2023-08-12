@@ -1,9 +1,10 @@
 #pragma once
 
-#include <mutex>
 #include <condition_variable>
-#include "common/macros.h"
+#include <mutex>
+
 #include "common/container/concurrent_blocking_queue.h"
+#include "common/macros.h"
 
 namespace kv::common {
 
@@ -14,18 +15,11 @@ class Channel {
 
   DISALLOW_COPY_AND_MOVE(Channel);
 
-  T Receive() {
-    return DoReceive();
-  }
+  T Receive() { return DoReceive(); }
 
-  void Send(T val) {
-    return DoSend(val);
-  }
+  void Send(T val) { return DoSend(val); }
 
-  void Close() {
-    return DoClose();
-  }
-
+  void Close() { return DoClose(); }
 
  private:
   T DoReceive() {
@@ -36,9 +30,7 @@ class Channel {
     std::unique_lock l(mu_);
     has_receiver_ = true;
     cond_.notify_all();
-    cond_.wait(l, [&] {
-      return (has_receiver_ && has_value_) || closed_;
-    });
+    cond_.wait(l, [&] { return (has_receiver_ && has_value_) || closed_; });
 
     if (closed_) {
       return {};
@@ -55,9 +47,7 @@ class Channel {
     }
 
     std::unique_lock l(mu_);
-    cond_.wait(l, [&] {
-      return (has_receiver_ && !has_value_) || closed_;
-    });
+    cond_.wait(l, [&] { return (has_receiver_ && !has_value_) || closed_; });
 
     if (closed_) {
       return;
@@ -79,7 +69,6 @@ class Channel {
   std::mutex mu_;
   std::condition_variable cond_;
   bool closed_{false};
-
 };
 
-}
+}  // namespace kv::common

@@ -89,13 +89,9 @@ class Raft {
 
   RaftState GetState() const;
 
-  int Test(int input) {
-    return input + 100;
-  }
+  int Test(int input) { return input + 100; }
 
-  inline void Kill() {
-    dead_ = true;
-  }
+  inline void Kill() { dead_ = true; }
 
   ~Raft();
 

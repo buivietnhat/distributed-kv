@@ -82,6 +82,26 @@ class Configuration {
     }
   }
 
+  void Connect(int server_num) {
+    connected_[server_num] = true;
+
+    // outgoing ClientEnds
+    for (int j = 0; j < num_servers_; j++) {
+      if (connected_[j]) {
+        auto endname = endnames_[server_num][j];
+        net_->Enable(endname, true);
+      }
+    }
+
+    // incoming ClientEnds
+    for (int j = 0; j < num_servers_; j++) {
+      if (connected_[j]) {
+        auto endname = endnames_[j][server_num];
+        net_->Enable(endname, true);
+      }
+    }
+  }
+
   void Crash(int server_num) {
     Disconnect(server_num);
     net_->DeleteServer(std::to_string(server_num));
@@ -252,13 +272,15 @@ class Configuration {
       if (connected_[i]) {
         auto [_, is_leader] = rafts_[i]->GetState();
         if (is_leader) {
-          Logger::Debug(kDTest, -1, fmt::format("expected no leader among connected servers, but {} claims to be leader", i));
+          Logger::Debug(kDTest, -1,
+                        fmt::format("expected no leader among connected servers, but {} claims to be leader", i));
           return false;
         }
       }
     }
     return true;
   }
+
  private:
   std::string IngestSnap(int server_num, const raft::Snapshot &snapshot, int index) {
     if (snapshot.Empty()) {
@@ -268,26 +290,6 @@ class Configuration {
     // TODO(nhat): find a way to to work with serialized data
 
     return "";
-  }
-
-  void Connect(int server_num) {
-    connected_[server_num] = true;
-
-    // outgoing ClientEnds
-    for (int j = 0; j < num_servers_; j++) {
-      if (connected_[j]) {
-        auto endname = endnames_[server_num][j];
-        net_->Enable(endname, true);
-      }
-    }
-
-    // incoming ClientEnds
-    for (int j = 0; j < num_servers_; j++) {
-      if (connected_[j]) {
-        auto endname = endnames_[j][server_num];
-        net_->Enable(endname, true);
-      }
-    }
   }
 
   void ApplierSnap(int server_num, std::shared_ptr<common::ConcurrentBlockingQueue<raft::ApplyMsg>>) {

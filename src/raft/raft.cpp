@@ -162,8 +162,14 @@ void Raft::TransitionToLeader() {
 
   Logger::Debug(kDTerm, me_, fmt::format("I am a leader now with term {}", term));
 
+  if (hbt_.joinable()) {
+    hbt_.join();
+  }
   hbt_ = std::thread([&] { BroadcastHeartBeats(); });
 
+  if (ldwlt_.joinable()) {
+    ldwlt_.join();
+  }
   ldwlt_ = std::thread([&] { LeaderWorkLoop(); });
 }
 
@@ -179,7 +185,6 @@ void Raft::AttemptElection() {
   Logger::Debug(kDVote, me_,
                 fmt::format("Time's up, start a new election now with term {}, lastLogIdx {}, lastLogTerm {}",
                             state->term_, state->last_log_index_, state->last_log_term_));
-
   auto [succeeded, new_term] = voter_->AttemptElection(state);
   if (succeeded) {
     TransitionToLeader();
