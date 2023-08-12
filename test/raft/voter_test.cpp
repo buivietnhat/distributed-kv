@@ -84,4 +84,41 @@ TEST(RaftVoteTest, ReElection) {
   EXPECT_TRUE(cfg.Cleanup());
 }
 
+TEST(RaftVoteTest, DISABLED_ManyElections) {
+  int servers = 7;
+  Configuration cfg{servers, false, false};
+
+  cfg.Begin("Test: multiple elections");
+
+  int iters = 10;
+  for (int ii = 1; ii < iters; ii++) {
+    Logger::Debug(kDTest, -1, fmt::format("Iteration {}", ii));
+    // disconnect three nodes
+    auto i1 = common::RandInt() % servers;
+    auto i2 = common::RandInt() % servers;
+    auto i3 = common::RandInt() % servers;
+
+    Logger::Debug(kDTest, -1, fmt::format("Disconnect with S{}", i1));
+    cfg.Disconnect(i1);
+    Logger::Debug(kDTest, -1, fmt::format("Disconnect with S{}", i2));
+    cfg.Disconnect(i3);
+    Logger::Debug(kDTest, -1, fmt::format("Disconnect with S{}", i3));
+    cfg.Disconnect(i3);
+
+    // either the current leader should still be alive.
+    // or the remaining four should elect a new one
+    EXPECT_NE(-1, cfg.CheckOneLeader());
+
+    Logger::Debug(kDTest, -1, fmt::format("Connect with S{}", i1));
+    cfg.Connect(i1);
+    Logger::Debug(kDTest, -1, fmt::format("Connect with S{}", i2));
+    cfg.Connect(i2);
+    Logger::Debug(kDTest, -1, fmt::format("Connect with S{}", i3));
+    cfg.Connect(i3);
+  }
+
+  EXPECT_NE(-1, cfg.CheckOneLeader());
+  EXPECT_TRUE(cfg.Cleanup());
+}
+
 }  // namespace kv::raft
