@@ -69,6 +69,8 @@ class Channel {
   std::mutex mu_;
   std::condition_variable cond_;
   bool closed_{false};
+
+  //  ConcurrentBlockingQueue<T> queue_;
 };
 
 }  // namespace kv::common

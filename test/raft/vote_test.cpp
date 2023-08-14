@@ -6,9 +6,9 @@ namespace kv::raft {
 
 static constexpr int RAFT_ELECTION_TIMEOUT = 1000;
 
-TEST(RaftVoteTest, DISABLED_InitializeEletection) {
+TEST(RaftVoteTest, InitializeEletection) {
   int servers = 3;
-  Configuration cfg{servers, false, false};
+  Configuration<int> cfg{servers, false, false};
 
   cfg.Begin("Test: initial election");
 
@@ -39,7 +39,7 @@ TEST(RaftVoteTest, DISABLED_InitializeEletection) {
 
 TEST(RaftVoteTest, ReElection) {
   int servers = 3;
-  Configuration cfg{servers, false, false};
+  Configuration<int> cfg{servers, false, false};
 
   cfg.Begin("Test: election after network failure");
 
@@ -49,6 +49,7 @@ TEST(RaftVoteTest, ReElection) {
   // if the leader disconnect, a new one should be elected
   Logger::Debug(kDTest, -1, fmt::format("Disconnect with Leader {}", leader1));
   cfg.Disconnect(leader1);
+  common::SleepMs(2000);
   EXPECT_NE(-1, cfg.CheckOneLeader());
 
   // if the old leader rejoins, that shouldn't
@@ -84,9 +85,9 @@ TEST(RaftVoteTest, ReElection) {
   EXPECT_TRUE(cfg.Cleanup());
 }
 
-TEST(RaftVoteTest, DISABLED_ManyElections) {
+TEST(RaftVoteTest, ManyElections) {
   int servers = 7;
-  Configuration cfg{servers, false, false};
+  Configuration<int> cfg{servers, false, false};
 
   cfg.Begin("Test: multiple elections");
 

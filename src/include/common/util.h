@@ -4,6 +4,7 @@
 #include <ctime>
 #include <random>
 #include <thread>
+#include <sstream>
 
 namespace kv {
 
@@ -64,5 +65,53 @@ inline double ElapsedTimeS(time_t before, time_t after) {
 }
 
 inline void SleepMs(uint32_t duration) { std::this_thread::sleep_for(MS(duration)); }
+
+inline std::vector<std::pair<int, int>> SortByValue(const std::unordered_map<int, int> &map) {
+  std::vector<std::pair<int, int>> pairs;
+  pairs.reserve(map.size());
+  for (const auto &[key, val] : map) {
+    pairs.emplace_back(key, val);
+  }
+  std::sort(pairs.begin(), pairs.end(), [](const auto &a, const auto &b) { return a.second < b.second; });
+
+  return pairs;
+}
+
+inline double CurrentTimeMs() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(Now().time_since_epoch()).count() % 100000;
+}
+
+template <typename T>
+inline std::string ToString(const std::vector<T> vect) {
+  std::stringstream ss;
+  ss << "[ ";
+  for (const auto &v : vect) {
+    ss << v << " ";
+  }
+  ss << "]";
+  return ss.str();
+}
+
+template <typename T>
+inline std::string ToString(const std::vector<std::pair<T,T>> vect) {
+  std::stringstream ss;
+  ss << "[ ";
+  for (const auto &[f, s] : vect) {
+    ss << "(" << f << "," << s << ")" << " ";
+  }
+  ss << "]";
+  return ss.str();
+}
+
+template <typename K, typename V>
+inline std::string ToString(const std::unordered_map<K,V> &map) {
+  std::stringstream ss;
+  ss << "[ ";
+  for (const auto [k, v] : map) {
+    ss << "{" << k << "," << v << "} ";
+  }
+  ss << "]";
+  return ss.str();
+}
 
 }  // namespace kv::common

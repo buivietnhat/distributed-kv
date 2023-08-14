@@ -27,8 +27,6 @@ struct RaftState {
   bool is_leader_;
 };
 
-struct ApplyMsg {};
-
 struct Snapshot {
   std::vector<std::byte> data;
   bool Empty() const { return data.empty(); }
@@ -91,12 +89,39 @@ class Raft {
 
   int Test(int input) { return input + 100; }
 
+  std::tuple<int, int, bool> Start(std::any command);
+
   inline void Kill() { dead_ = true; }
 
   ~Raft();
 
  private:
+  void RequestCommit(int server, int index, int prev_log_term);
+
+  void RequestCommits(const std::vector<int> &server_list, int index, int start_idx);
+
+  void RequestAppendEntries(const std::vector<int> &replica_list, int start_idx);
+
+  std::pair<std::vector<int>, int> AnalyseToCommit(const std::unordered_map<int, int> &matched_result, int server);
+
+  int ComputePreviousIndexes(int old_pre_index, const AppendEntryReply &reply) const;
+
+  AppendEntriesResult RequestAppendEntry(int server, int prev_log_idx, int prev_log_term, bool commit, int commit_idx);
+
+  std::pair<std::vector<int>, int> NeedToRequestAppend() const;
+
   void Persist(std::vector<std::byte> snapshot = {}) const;
+
+  inline void InitMetaDataForLeader() {
+    auto last_log_idx = lm_->GetLastLogIdx();
+    for (uint32_t s = 0; s < peers_.size(); s++) {
+      if (s != me_) {
+        next_index_[s] = last_log_idx + 1;
+        tentative_next_index_[s] = last_log_idx + 1;
+        match_index_[s] = 0;
+      }
+    }
+  }
 
   inline bool Killed() const { return dead_; }
 
@@ -123,7 +148,7 @@ class Raft {
 
   void Ticker();
 
-  std::optional<AppendEntryReply> RequestAppendEntries(int server, const AppendEntryArgs &args) const;
+  std::optional<AppendEntryReply> DoRequestAppendEntry(int server, const AppendEntryArgs &args) const;
 
   std::shared_ptr<InternalState> CaptureCurrentState() const;
 

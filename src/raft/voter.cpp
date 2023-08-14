@@ -99,18 +99,6 @@ std::pair<bool, int> Voter::AttemptElection(std::shared_ptr<InternalState> state
 
   for (size_t server = 0; server < peers_.size(); server++) {
     if (server != me_) {
-      //      group_.run([&, state = state, server = server, done = done, chan = vote_channel] {
-      //        auto vote_result = DoRequestVote(state, server);
-      //        if (*done) {
-      //          return;
-      //        }
-      //        if (vote_result) {
-      //          chan->Enqueue(*vote_result);
-      //        } else {
-      //          chan->Enqueue({});
-      //        }
-      //      });
-
       std::thread([&, state, server, done, chan = vote_channel] {
         auto vote_result = DoRequestVote(state, server);
         if (*done) {
@@ -174,9 +162,6 @@ void Voter::ResetElectionTimer() {
   last_heard_from_leader_ = common::Now();
 }
 
-Voter::~Voter() {
-  // wait for all the tasks in the task_group to finish
-  group_.wait();
-}
+Voter::~Voter() {}
 
 }  // namespace kv::raft

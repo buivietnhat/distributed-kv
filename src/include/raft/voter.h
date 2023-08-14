@@ -79,7 +79,6 @@ class Voter {
   std::atomic<bool> give_up_{false};
   uint32_t me_;
   static constexpr int MAX_WAIT_TIME = 500;
-  tbb::task_group group_;
   static constexpr int NUM_THREAD = 5;
 };
 

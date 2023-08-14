@@ -17,8 +17,29 @@ Raft::Raft(std::vector<network::ClientEnd *> peers, uint32_t me, storage::Persis
   Logger::Debug(kDTrace, me_, "....... Start .......");
 
   voter_ = std::make_unique<Voter>(peers, me_);
+  lm_ = std::make_unique<LogManager>(me_, apply_channel);
 
   tickert_ = std::thread([&] { Ticker(); });
+}
+
+Raft::~Raft() {
+  if (!Killed()) {
+    dead_ = true;
+  }
+
+  if (tickert_.joinable()) {
+    tickert_.join();
+  }
+
+  if (hbt_.joinable()) {
+    hbt_.join();
+  }
+
+  if (ldwlt_.joinable()) {
+    ldwlt_.join();
+  }
+
+  group_.wait();
 }
 
 RequestVoteReply Raft::RequestVote(const RequestVoteArgs &args) {
@@ -52,30 +73,10 @@ RequestVoteReply Raft::RequestVote(const RequestVoteArgs &args) {
   return reply;
 }
 
-Raft::~Raft() {
-  if (!Killed()) {
-    dead_ = true;
-  }
-
-  if (tickert_.joinable()) {
-    tickert_.join();
-  }
-
-  if (hbt_.joinable()) {
-    hbt_.join();
-  }
-
-  if (ldwlt_.joinable()) {
-    ldwlt_.join();
-  }
-
-  group_.wait();
-}
-
 AppendEntryReply Raft::AppendEntries(const AppendEntryArgs &args) {
   Logger::Debug(kDInfo, me_,
-                fmt::format("Receive AE from Leader {} for term {} commit {} prevLogIdx {} prevLogTerm {} ",
-                            args.leader_id_, args.leader_term_, args.commit_, args.prev_log_idx_, args.prev_log_term_));
+                fmt::format("Receive AE from Leader {} for term {} commit {} prevLogIdx {} prevLogTerm {} hearbeat {} ",
+                            args.leader_id_, args.leader_term_, args.commit_, args.prev_log_idx_, args.prev_log_term_, args.hearbeat_));
   bool persist_changes = false;
   AppendEntryReply reply;
 
@@ -104,9 +105,14 @@ AppendEntryReply Raft::AppendEntries(const AppendEntryArgs &args) {
     return reply;
   }
 
-  // TODO(nhat): append logs
+  auto persister = [&]() { Persist(); };
+  auto has_persisted = lm_->AppendEntries(args, &reply, persister);
 
-  return AppendEntryReply();
+  if (!has_persisted && persist_changes) {
+    Persist();
+  }
+
+  return reply;
 }
 
 RaftState Raft::GetState() const {
@@ -155,9 +161,8 @@ void Raft::TransitionToLeader() {
   std::unique_lock l(mu_);
   role_ = LEADER;
   auto term = term_;
-  // TODO(nhat) implement this
-  //  InitMetadataForLeader();
-  //  tentative_cmit_index_[me_] = lm_->CommitIndex();
+  InitMetaDataForLeader();
+  tentative_cmit_index_[me_] = lm_->GetComminIndex();
   l.unlock();
 
   Logger::Debug(kDTerm, me_, fmt::format("I am a leader now with term {}", term));

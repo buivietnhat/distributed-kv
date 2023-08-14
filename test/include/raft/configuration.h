@@ -1,13 +1,13 @@
 #pragma once
 
 #include <any>
-#include <format>
 #include <functional>
 #include <iostream>
 #include <mutex>
 #include <string_view>
 
 #include "common/container/concurrent_blocking_queue.h"
+#include "common/exception.h"
 #include "common/logger.h"
 #include "common/util.h"
 #include "network/network.h"
@@ -20,6 +20,7 @@ namespace kv::raft {
 
 using common::Logger;
 
+template <typename CommandType>
 class Configuration {
   using applier_t = std::function<void(int, std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>>)>;
 
@@ -34,6 +35,9 @@ class Configuration {
     last_applied_.resize(num_servers);
     logs_.resize(num_servers);
     saved_.resize(num_servers);
+    apply_err_.resize(num_servers);
+    apply_chs_.resize(num_servers);
+    apply_threads_.resize(num_servers);
 
     net_->SetLongDelay(true);
 
@@ -61,6 +65,119 @@ class Configuration {
   }
 
   ~Configuration() { Cleanup(); }
+
+  // how many servers think a log entry is commited?
+  std::pair<int, std::any> NCommited(int index) {
+    int count = 0;
+    std::any cmd;
+
+    for (uint32_t i = 0; i < rafts_.size(); i++) {
+      if (apply_err_[i] != "") {
+        throw CONFIG_EXCEPTION(apply_err_[i]);
+      }
+
+      std::unique_lock l(mu_);
+      auto ok = logs_[i].contains(index);
+      std::any cmd1;
+      if (ok) {
+        cmd1 = logs_[i][index];
+      }
+      l.unlock();
+
+      if (ok) {
+        if (count > 0 && std::any_cast<CommandType>(cmd) != std::any_cast<CommandType>(cmd1)) {
+          throw CONFIG_EXCEPTION(fmt::format("committed values do not match: index {}, {}, {}", index,
+                                             std::any_cast<CommandType>(cmd), std::any_cast<CommandType>(cmd1)));
+        }
+        count += 1;
+        cmd = cmd1;
+      }
+    }
+    return {count, cmd};
+  }
+
+  // wait for at least n servers to commit.
+  // but don't wait forever.
+  std::any Wait(int index, int n, int start_term) {
+    auto to = 10;
+    for (int iters = 0; iters < 30; iters++) {
+      auto [nd, _] = NCommited(index);
+      if (nd > n) {
+        break;
+      }
+      common::SleepMs(to);
+      if (to < 1000) {  // 1 second
+        to *= 2;
+      }
+      if (start_term > -1) {
+        for (const auto &r : rafts_) {
+          auto [t, _] = r->GetState();
+          if (t > start_term) {
+            // someone has moved on
+            // can no longer guarantee that we'll "win"
+            return -1;
+          }
+        }
+      }
+    }
+    auto [nd, cmd] = NCommited(index);
+    if (nd < n) {
+      throw CONFIG_EXCEPTION(fmt::format("only {} decided for index {}; wanted {}", nd, index, n));
+    }
+    return cmd;
+  }
+
+  // do a complete agreement.
+  int One(std::any cmd, int expected_server, bool retry) {
+    auto t0 = common::Now();
+    auto starts = 0;
+    while (common::ElapsedTimeS(t0, common::Now()) < 10 && !finished_) {
+      // try all the servers, maybe one is the leader
+      int index = -1;
+      for (int si = 0; si < num_servers_; si++) {
+        starts = (starts + 1) % num_servers_;
+        raft::Raft *rf{nullptr};
+        std::unique_lock l(mu_);
+        if (connected_[starts]) {
+          rf = rafts_[starts].get();
+        }
+        l.unlock();
+        if (rf != nullptr) {
+          auto [index1, _, ok] = rf->Start(cmd);
+          if (ok) {
+            index = index1;
+            break;
+          }
+        }
+      }
+
+      if (index != -1) {
+        // somebody claimed to be the leader and to have
+        // submitted our command; wait a while for agreement.
+        auto t1 = common::Now();
+        while (common::ElapsedTimeS(t1, common::Now()) < 2) {
+          auto [nd, cmd1] = NCommited(index);
+          if (nd > 0 && nd >= expected_server) {
+            // commited
+            if (std::any_cast<CommandType>(cmd1) == std::any_cast<CommandType>(cmd)) {
+              // and it was the command we submitted
+              return index;
+            }
+          }
+          common::SleepMs(20);
+        }
+        if (retry == false) {
+          throw CONFIG_EXCEPTION(fmt::format("One({}) failed to reach agreement", std::any_cast<CommandType>(cmd)));
+        }
+      } else {
+        common::SleepMs(50);
+      }
+    }
+    if (finished_ == false) {
+      throw CONFIG_EXCEPTION(fmt::format("One({}) failed to reach agreement", std::any_cast<CommandType>(cmd)));
+    }
+    return -1;
+  }
 
   void Disconnect(int server_num) {
     connected_[server_num] = false;
@@ -168,15 +285,16 @@ class Configuration {
 
     mu_.unlock();
 
-    auto appply_channel = std::make_shared<common::ConcurrentBlockingQueue<raft::ApplyMsg>>();
-    auto rf = std::make_unique<Raft>(std::move(ends), server_num, saved_[server_num].get(), appply_channel);
+    apply_chs_[server_num] = std::make_shared<common::ConcurrentBlockingQueue<raft::ApplyMsg>>();
+    auto rf = std::make_unique<Raft>(std::move(ends), server_num, saved_[server_num].get(), apply_chs_[server_num]);
 
     mu_.lock();
     rafts_[server_num] = std::move(rf);
     mu_.unlock();
 
-    std::thread apply_thread(applier, server_num, appply_channel);
-    apply_thread.detach();
+    //    std::thread apply_thread(applier, server_num, apply_chs_[server_num]);
+    apply_threads_[server_num] = std::thread(applier, server_num, apply_chs_[server_num]);
+    //    apply_thread.detach();
 
     auto server = std::make_unique<network::Server>();
     server->AddRaft(rafts_[server_num].get());
@@ -202,6 +320,15 @@ class Configuration {
       }
 
       net_->Cleanup();
+
+      // wake up all the apply channels to finish the thread
+      for (auto &apply_ch : apply_chs_) {
+        apply_ch->Enqueue({});
+      }
+      for (auto &thread : apply_threads_) {
+        thread.join();
+      }
+
       return !CheckTimeout();
     }
     return false;
@@ -292,15 +419,53 @@ class Configuration {
     return "";
   }
 
+  std::pair<std::string, bool> CheckLogs(int i, const raft::ApplyMsg &m) {
+    std::string err_msg = "";
+    auto v = std::any_cast<CommandType>(m.command_);
+
+    for (uint32_t j = 0; j < logs_.size(); j++) {
+      if (logs_[j].contains(m.command_index_)) {
+        auto old = std::any_cast<CommandType>(logs_[j][m.command_index_]);
+        if (old != v) {
+          err_msg = fmt::format("commit index={} server={} {} != server={} {}", m.command_index_, i,
+                                std::any_cast<CommandType>(m.command_), j, old);
+        }
+      }
+    }
+
+    bool prevok = logs_[i].contains(m.command_index_ - 1);
+    logs_[i][m.command_index_] = v;
+    if (m.command_index_ > max_index_) {
+      max_index_ = m.command_index_;
+    }
+
+    return {err_msg, prevok};
+  }
+
   void ApplierSnap(int server_num, std::shared_ptr<common::ConcurrentBlockingQueue<raft::ApplyMsg>>) {
     while (!finished_) {
     }
   }
 
-  void Applier(int server_num, std::shared_ptr<common::ConcurrentBlockingQueue<raft::ApplyMsg>>) {
+  void Applier(int server_num, std::shared_ptr<common::ConcurrentBlockingQueue<raft::ApplyMsg>> apply_ch) {
     while (!finished_) {
-      //      std::cout << "applier running for server " << server_num << std::endl;
-      std::this_thread::sleep_for(100ms);
+      raft::ApplyMsg m;
+      apply_ch->Dequeue(&m);
+      if (m.command_valid_ == false) {
+        // ignore
+      } else {
+        std::unique_lock l(mu_);
+        auto [err_msg, prevok] = CheckLogs(server_num, m);
+        l.unlock();
+
+        if (m.command_index_ > 1 && prevok == false) {
+          err_msg = fmt::format("server {} apply out of order {}\n", server_num, m.command_index_);
+        }
+        if (err_msg != "") {
+          Logger::Debug(kDTest, -1, fmt::format("apply error: {}", err_msg));
+          apply_err_[server_num] = err_msg;
+        }
+      }
     }
   }
 
@@ -316,6 +481,10 @@ class Configuration {
   std::vector<int> last_applied_;
   common::time_t t0_;     // time at which tester called Begin()
   common::time_t start_;  // time at which the Configuration constructor was called
+  int max_index_{0};
+  std::vector<std::string> apply_err_;
+  std::vector<std::shared_ptr<common::ConcurrentBlockingQueue<raft::ApplyMsg>>> apply_chs_;
+  std::vector<std::thread> apply_threads_;
 };
 
 }  // namespace kv::raft

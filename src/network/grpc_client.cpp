@@ -1,7 +1,5 @@
 #include "network/grpc_client.h"
 
-#include <format>
-
 #include "common/exception.h"
 
 namespace kv::network {

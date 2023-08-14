@@ -213,11 +213,9 @@ class Network {
   void Cleanup() {
     if (!finished_) {
       finished_ = true;
-
       // stop receiving messages
       ShutdownClientEnds();
 
-      // enqueue an empty message to wake up the dispatching thread
       chan_.Close();
       dp_thread_.join();
     }
@@ -235,14 +233,6 @@ class Network {
       }
       std::thread([&, req = std::move(req)] { ProcessRequest(req); }).detach();
     }
-    //    // drain all the queueing requests, ask as the server has been killed
-    //    while (!msg_queue_.Empty()) {
-    //      RequestMessage req;
-    //      msg_queue_.Dequeue(&req);
-    //      if (req.rep_queue_ != nullptr) {
-    //        req.rep_queue_->Enqueue({});
-    //      }
-    //    }
   }
 
   void ShutdownClientEnds() {
@@ -276,15 +266,33 @@ class Network {
       auto reply_ok = std::make_shared<bool>(false);
       auto is_server_dead = std::make_shared<bool>(false);
 
-      std::thread([&, reply_ok] {
+      //      std::thread([&, reply_ok] {
+      //        reply = server->DispatchReq(req);
+      //        *reply_ok = true;
+      //      }).detach();
+      // TODO(nhat): this launch somehow gets stuck if compile with higher optimization level than O0
+      auto fut1 = std::async(std::launch::async, [&, reply_ok] {
         reply = server->DispatchReq(req);
         *reply_ok = true;
-      }).detach();
+      });
 
-      std::thread([&, reply_ok, is_server_dead] {
+      //      std::thread([&, reply_ok, is_server_dead] {
+      //        while (!(*reply_ok)) {
+      //          std::this_thread::sleep_for(100ms);
+      //          if (*reply_ok || *is_server_dead) {
+      //            return;
+      //          }
+      //          *is_server_dead = IsServerDead(req.endname_, servername, server);
+      //          if (*is_server_dead) {
+      //            return;
+      //          }
+      //        }
+      //      }).detach();
+
+      auto fut2 = std::async(std::launch::async, [&, reply_ok, is_server_dead] {
         while (!(*reply_ok)) {
           std::this_thread::sleep_for(100ms);
-          if (*reply_ok) {
+          if (*reply_ok || *is_server_dead) {
             return;
           }
           *is_server_dead = IsServerDead(req.endname_, servername, server);
@@ -292,8 +300,9 @@ class Network {
             return;
           }
         }
-      }).detach();
+      });
 
+      *is_server_dead = IsServerDead(req.endname_, servername, server);
       // wait until we have a reply or server is dead
       while (*reply_ok == false && *is_server_dead == false) {
       }

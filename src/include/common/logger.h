@@ -4,6 +4,7 @@
 #include <string>
 
 #include "common/macros.h"
+#include "common/util.h"
 #include "fmt/format.h"
 
 namespace kv {
@@ -34,8 +35,6 @@ static constexpr const char *kDShardCtr = "SCTR";
 
 namespace kv::common {
 
-#define MY_LOG_LOG_TIME_FORMAT "%H:%M:%S"
-
 class Logger {
  public:
   using Topic = std::string;
@@ -43,16 +42,11 @@ class Logger {
 
   static inline void Debug(const Topic &topic, int server, const std::string &message) {
 #ifndef NDEBUG
-    ::time_t t = ::time(nullptr);
-    tm *cur_time = localtime(&t);  // NOLINT
-    char time_str[32];             // FIXME
-    ::strftime(time_str, 32, MY_LOG_LOG_TIME_FORMAT, cur_time);
-
     std::string prefix;
     if (server == -1) {
-      prefix = fmt::format("{} {} ", time_str, topic);
+      prefix = fmt::format("{} {} ", CurrentTimeMs(), topic);
     } else {
-      prefix = fmt::format("{} {} [{}] ", time_str, topic, server);
+      prefix = fmt::format("{} {} [{}] ", CurrentTimeMs(), topic, server);
     }
 
     auto log = prefix + message + "\n";
