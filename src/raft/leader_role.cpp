@@ -304,7 +304,7 @@ void Raft::RequestAppendEntries(const std::vector<int> &replica_list, int start_
       };
 
       std::unique_lock l(mu_);
-      if (next_index_[server] > last_log_idx + 1) {
+      if (next_index_[server] >= last_log_idx + 1) {
         tentative_next_index_[server] = last_log_idx + 1;
         Logger::Debug(kDLeader, me_,
                       fmt::format("Gave up sending Logs to server {} since it has already been updated", server));
