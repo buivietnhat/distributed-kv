@@ -47,10 +47,11 @@ void Raft::BroadcastHeartBeats() {
     for (uint32_t server = 0; server < peers_.size(); server++) {
       if (server != me_) {
         std::thread([&, server = server, term = term] { SendHeartBeat(server, term); }).detach();
+        //        pool_.AddTask([&, server = server, term = term] { SendHeartBeat(server, term); });
       }
     }
 
-    common::SleepMs(150);
+    common::SleepMs(250);
   }
 }
 
@@ -74,6 +75,8 @@ void Raft::LeaderWorkLoop() {
               common::ToString(next_index_)));
       RequestAppendEntries(replica_list, start_idx);
       l.lock();
+    } else {
+      //      Logger::Debug(kDInfo, me_, "No need to send AE since all the replica is up-to-date");
     }
     l.unlock();
 
@@ -259,7 +262,10 @@ std::pair<std::vector<int>, int> Raft::AnalyseToCommit(const std::unordered_map<
   if (leader_commit >= commit_index) {
     if (tentative_cmit_index_[server] < commit_index) {
       server_list.push_back(server);
-      Logger::Debug(kDInfo, me_, fmt::format("Set tentative cmit idx for server {} to {}", server, commit_index));
+      Logger::Debug(kDInfo, me_,
+                    fmt::format("Set tentative cmit"
+                                " idx for server {} to {}",
+                                server, commit_index));
       tentative_next_index_[server] = commit_index;
     } else {
       Logger::Debug(kDLeader, me_,
@@ -387,8 +393,12 @@ void Raft::RequestAppendEntries(const std::vector<int> &replica_list, int start_
   // or been killed, or not a leader anymore
   std::unique_lock log_lock(*log_mu);
   log_cond->wait(log_lock, [&] {
-    return Killed() || !IsLeader() || *logs_accepted >= peers_.size() / 2 || *logs_finished >= peers_.size();
+    return Killed() || !IsLeader() || *logs_accepted > peers_.size() / 2 || *logs_finished >= peers_.size();
   });
+
+  Logger::Debug(kDTrace, me_,
+                fmt::format("Request AEs return with Killed {}, IsLeader {}, LogsAccepted {}, LogFinished {}", Killed(),
+                            IsLeader(), *logs_accepted, *logs_finished));
 }
 
 void Raft::RequestCommits(const std::vector<int> &server_list, int index, int start_idx) {
@@ -417,7 +427,6 @@ void Raft::RequestCommits(const std::vector<int> &server_list, int index, int st
       continue;
     }
 
-//        std::thread([&, s, index, prev_log_term] { RequestCommit(s, index, prev_log_term); }).detach();
     pool_.AddTask([&, s, index, prev_log_term] { RequestCommit(s, index, prev_log_term); });
   }
 

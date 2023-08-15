@@ -13,7 +13,7 @@ using common::Logger;
 
 Raft::Raft(std::vector<network::ClientEnd *> peers, uint32_t me, storage::PersistentInterface *persister,
            std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>> apply_channel)
-    : peers_(peers), persister_(persister), me_(me), pool_(10) {
+    : peers_(peers), persister_(persister), me_(me), pool_(20) {
   Logger::Debug(kDTrace, me_, "....... Start .......");
 
   voter_ = std::make_unique<Voter>(peers, me_);
@@ -39,7 +39,7 @@ Raft::~Raft() {
     ldwlt_.join();
   }
 
-  pool_.Wait();
+//  pool_.Wait();
 
 }
 
@@ -169,12 +169,12 @@ void Raft::TransitionToLeader() {
   Logger::Debug(kDTerm, me_, fmt::format("I am a leader now with term {}", term));
 
   if (hbt_.joinable()) {
-    hbt_.join();
+    hbt_.detach();
   }
   hbt_ = std::thread([&] { BroadcastHeartBeats(); });
 
   if (ldwlt_.joinable()) {
-    ldwlt_.join();
+    ldwlt_.detach();
   }
   ldwlt_ = std::thread([&] { LeaderWorkLoop(); });
 }

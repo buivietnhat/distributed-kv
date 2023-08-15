@@ -55,7 +55,7 @@ bool Voter::RequestVote(const InternalState &state, const RequestVoteArgs &args,
   }
 
   Logger::Debug(kDDrop, me_,
-                fmt::format("Drop Vote request since the candidate %d is not Up-To-Date as Mine: "
+                fmt::format("Drop Vote request since the candidate {} is not Up-To-Date as Mine: "
                             "lastLogTerm {}, lastLogidx {}, Candidate: lastLogTerm {}, lastLogIdx {}",
                             args.candidate_, state.last_log_term_, state.last_log_index_, args.last_log_term_,
                             args.last_log_index_));
@@ -163,7 +163,7 @@ void Voter::ResetElectionTimer() {
 }
 
 Voter::~Voter() {
-  pool_.Wait();
+//  pool_.Wait();
 }
 
 }  // namespace kv::raft
