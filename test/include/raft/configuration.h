@@ -18,6 +18,8 @@ using namespace std::chrono_literals;
 
 namespace kv::raft {
 
+static constexpr int RAFT_ELECTION_TIMEOUT = 1000;
+
 using common::Logger;
 
 template <typename CommandType>
@@ -94,6 +96,10 @@ class Configuration {
       }
     }
     return {count, cmd};
+  }
+
+  Raft *GetRaft(int server) {
+    return rafts_[server].get();
   }
 
   // wait for at least n servers to commit.
@@ -329,7 +335,11 @@ class Configuration {
         thread.join();
       }
 
-      return !CheckTimeout();
+      auto timeout = CheckTimeout();
+      if (!timeout) {
+        Logger::Debug(kDTest, -1, "  ... Passed --");
+      }
+      return !timeout;
     }
     return false;
   }
@@ -359,7 +369,8 @@ class Configuration {
       auto last_term_with_leader = -1;
       for (const auto &[term, leaders] : leaders_map) {
         if (leaders.size() > 1) {
-          std::cout << fmt::format("term {} has {}(>1) leaders\n", term, leaders.size());
+          throw CONFIG_EXCEPTION(fmt::format("term {} has {}(>1) leaders\n", term, leaders.size()));
+//          std::cout << fmt::format("term {} has {}(>1) leaders\n", term, leaders.size());
           return -1;
         }
 
@@ -373,7 +384,8 @@ class Configuration {
       }
     }
 
-    std::cout << fmt::format("expected one leader, got none\n");
+//    std::cout << fmt::format("expected one leader, got none\n");
+    throw CONFIG_EXCEPTION("expected one leader, got none");
     return -1;
   }
 

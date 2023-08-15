@@ -13,7 +13,7 @@ using common::Logger;
 
 Raft::Raft(std::vector<network::ClientEnd *> peers, uint32_t me, storage::PersistentInterface *persister,
            std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>> apply_channel)
-    : peers_(peers), persister_(persister), me_(me) {
+    : peers_(peers), persister_(persister), me_(me), pool_(10) {
   Logger::Debug(kDTrace, me_, "....... Start .......");
 
   voter_ = std::make_unique<Voter>(peers, me_);
@@ -39,7 +39,8 @@ Raft::~Raft() {
     ldwlt_.join();
   }
 
-  group_.wait();
+  pool_.Wait();
+
 }
 
 RequestVoteReply Raft::RequestVote(const RequestVoteArgs &args) {

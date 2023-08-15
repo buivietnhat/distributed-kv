@@ -4,8 +4,6 @@
 
 namespace kv::raft {
 
-static constexpr int RAFT_ELECTION_TIMEOUT = 1000;
-
 TEST(RaftVoteTest, InitializeEletection) {
   int servers = 3;
   Configuration<int> cfg{servers, false, false};

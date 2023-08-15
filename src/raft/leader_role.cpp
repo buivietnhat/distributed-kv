@@ -282,7 +282,7 @@ void Raft::RequestAppendEntries(const std::vector<int> &replica_list, int start_
   auto logs_accepted = std::make_shared<uint32_t>(1);
   auto logs_finished = std::make_shared<uint32_t>(1);
   auto log_mu = std::make_shared<std::mutex>();
-  std::condition_variable log_cond;
+  auto log_cond = std::make_shared<std::condition_variable>();
 
   std::unique_lock l(mu_);
   auto last_log_idx = lm_->GetLastLogIdx();
@@ -295,12 +295,12 @@ void Raft::RequestAppendEntries(const std::vector<int> &replica_list, int start_
   }
 
   for (auto server : replica_list) {
-    std::thread([&, server, start_idx, log_mu, logs_accepted, logs_finished, last_log_idx] {
-      auto log_finish_func = [&, log_mu] {
+    pool_.AddTask([&, server, start_idx, log_mu, logs_accepted, logs_finished, last_log_idx, log_cond] {
+      auto log_finish_func = [&] {
         std::unique_lock log_lock(*log_mu);
         *logs_finished += 1;
         log_lock.unlock();
-        log_cond.notify_all();
+        log_cond->notify_all();
       };
 
       std::unique_lock l(mu_);
@@ -375,18 +375,18 @@ void Raft::RequestAppendEntries(const std::vector<int> &replica_list, int start_
       *logs_finished += 1;
       log_lock.unlock();
 
-      log_cond.notify_all();
+      log_cond->notify_all();
 
       if (!commit_list.empty()) {
         RequestCommits(commit_list, cmit_idx, start_idx);
       }
-    }).detach();
+    });
   }
 
   // wait for all servers to finish, or the majority of servers has replicated
   // or been killed, or not a leader anymore
   std::unique_lock log_lock(*log_mu);
-  log_cond.wait(log_lock, [&] {
+  log_cond->wait(log_lock, [&] {
     return Killed() || !IsLeader() || *logs_accepted >= peers_.size() / 2 || *logs_finished >= peers_.size();
   });
 }
@@ -417,7 +417,8 @@ void Raft::RequestCommits(const std::vector<int> &server_list, int index, int st
       continue;
     }
 
-    std::thread([&, s, index, prev_log_term] { RequestCommit(s, index, prev_log_term); }).detach();
+//        std::thread([&, s, index, prev_log_term] { RequestCommit(s, index, prev_log_term); }).detach();
+    pool_.AddTask([&, s, index, prev_log_term] { RequestCommit(s, index, prev_log_term); });
   }
 
   if (self_commit) {

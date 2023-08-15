@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "common/container/concurrent_blocking_queue.h"
+#include "common/thread_pool.h"
 #include "raft/log_manager.h"
 #include "raft/voter.h"
 
@@ -169,10 +170,11 @@ class Raft {
   std::unique_ptr<Voter> voter_;
   std::unique_ptr<LogManager> lm_;
 
-  tbb::task_group group_;
   std::thread tickert_;
   std::thread hbt_;
   std::thread ldwlt_;
+
+  common::ThreadPool pool_;
 
   static constexpr int NUM_THREAD = 5;
 };
