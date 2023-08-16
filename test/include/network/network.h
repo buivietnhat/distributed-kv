@@ -263,46 +263,28 @@ class Network {
       // we can periodically check if the server has been killed and the RPC should
       // get a failure reply
       ReplyMessage reply;
+      std::mutex m;
+      std::condition_variable cond;
       auto reply_ok = std::make_shared<bool>(false);
       auto is_server_dead = std::make_shared<bool>(false);
 
-      //      std::thread([&, reply_ok] {
-      //        reply = server->DispatchReq(req);
-      //        *reply_ok = true;
-      //      }).detach();
-      // TODO(nhat): this launch somehow gets stuck if compile with higher optimization level than O0
       auto fut1 = std::async(std::launch::async, [&, reply_ok] {
         reply = server->DispatchReq(req);
+        std::lock_guard l(m);
         *reply_ok = true;
-      });
-
-      //      std::thread([&, reply_ok, is_server_dead] {
-      //        while (!(*reply_ok)) {
-      //          std::this_thread::sleep_for(100ms);
-      //          if (*reply_ok || *is_server_dead) {
-      //            return;
-      //          }
-      //          *is_server_dead = IsServerDead(req.endname_, servername, server);
-      //          if (*is_server_dead) {
-      //            return;
-      //          }
-      //        }
-      //      }).detach();
-
-      auto fut2 = std::async(std::launch::async, [&, reply_ok, is_server_dead] {
-        while (!(*reply_ok)) {
-          std::this_thread::sleep_for(100ms);
-          if (*reply_ok || *is_server_dead) {
-            return;
-          }
-          *is_server_dead = IsServerDead(req.endname_, servername, server);
-          if (*is_server_dead) {
-            return;
-          }
-        }
+        cond.notify_one();
       });
 
       *is_server_dead = IsServerDead(req.endname_, servername, server);
+
+      std::unique_lock l(m);
+      while (true) {
+        if (cond.wait_for(l, MS(100), [&] { return *reply_ok || *is_server_dead; })) {
+          break;
+        }
+        *is_server_dead = IsServerDead(req.endname_, servername, server);
+      }
+
       // wait until we have a reply or server is dead
       while (*reply_ok == false && *is_server_dead == false) {
       }
