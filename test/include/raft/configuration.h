@@ -98,9 +98,7 @@ class Configuration {
     return {count, cmd};
   }
 
-  Raft *GetRaft(int server) {
-    return rafts_[server].get();
-  }
+  Raft *GetRaft(int server) { return rafts_[server].get(); }
 
   // wait for at least n servers to commit.
   // but don't wait forever.
@@ -173,6 +171,7 @@ class Configuration {
           common::SleepMs(20);
         }
         if (retry == false) {
+          Logger::Debug(kDTest, -1, fmt::format("One({}) failed to reach agreement", std::any_cast<CommandType>(cmd)));
           throw CONFIG_EXCEPTION(fmt::format("One({}) failed to reach agreement", std::any_cast<CommandType>(cmd)));
         }
       } else {
@@ -180,6 +179,7 @@ class Configuration {
       }
     }
     if (finished_ == false) {
+      Logger::Debug(kDTest, -1, fmt::format("One({}) failed to reach agreement", std::any_cast<CommandType>(cmd)));
       throw CONFIG_EXCEPTION(fmt::format("One({}) failed to reach agreement", std::any_cast<CommandType>(cmd)));
     }
     return -1;
@@ -370,7 +370,7 @@ class Configuration {
       for (const auto &[term, leaders] : leaders_map) {
         if (leaders.size() > 1) {
           throw CONFIG_EXCEPTION(fmt::format("term {} has {}(>1) leaders\n", term, leaders.size()));
-//          std::cout << fmt::format("term {} has {}(>1) leaders\n", term, leaders.size());
+          //          std::cout << fmt::format("term {} has {}(>1) leaders\n", term, leaders.size());
           return -1;
         }
 
@@ -384,7 +384,7 @@ class Configuration {
       }
     }
 
-//    std::cout << fmt::format("expected one leader, got none\n");
+    //    std::cout << fmt::format("expected one leader, got none\n");
     throw CONFIG_EXCEPTION("expected one leader, got none");
     return -1;
   }

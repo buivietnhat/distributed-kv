@@ -202,7 +202,8 @@ bool LogManager::AppendEntries(const AppendEntryArgs &args, AppendEntryReply *re
     }
     auto from_commit_idx = commid_idx_ + 1;
     auto to_commit_idx = std::min(args.leader_commit_idx_, static_cast<int>(log_.size() - 1 + start_idx_));
-    Logger::Debug(kDLog2, me_, fmt::format("Trying to commit from Index {} to Index {}", from_commit_idx, to_commit_idx));
+    Logger::Debug(kDLog2, me_,
+                  fmt::format("Trying to commit from Index {} to Index {}", from_commit_idx, to_commit_idx));
     // set the tentative commit index so that other threads won't retry
     tentative_commit_idx_ = to_commit_idx;
     auto start_idx = start_idx_;

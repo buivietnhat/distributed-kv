@@ -8,6 +8,7 @@
 
 #include "common/container/concurrent_blocking_queue.h"
 #include "common/thread_pool.h"
+#include "common/thread_registry.h"
 #include "raft/log_manager.h"
 #include "raft/voter.h"
 
@@ -174,7 +175,8 @@ class Raft {
   std::thread hbt_;
   std::thread ldwlt_;
 
-  common::ThreadPool pool_;
+//  common::ThreadPool pool_;
+  common::ThreadRegistry thread_registry_;
 
   static constexpr int NUM_THREAD = 5;
 };

@@ -2,8 +2,8 @@
 
 #include <mutex>
 
-#include "common/util.h"
 #include "common/thread_pool.h"
+#include "common/util.h"
 
 namespace kv::network {
 

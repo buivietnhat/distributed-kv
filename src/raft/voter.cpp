@@ -163,7 +163,7 @@ void Voter::ResetElectionTimer() {
 }
 
 Voter::~Voter() {
-//  pool_.Wait();
+  //  pool_.Wait();
 }
 
 }  // namespace kv::raft

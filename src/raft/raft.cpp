@@ -13,7 +13,7 @@ using common::Logger;
 
 Raft::Raft(std::vector<network::ClientEnd *> peers, uint32_t me, storage::PersistentInterface *persister,
            std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>> apply_channel)
-    : peers_(peers), persister_(persister), me_(me), pool_(20) {
+    : peers_(peers), persister_(persister), me_(me) {
   Logger::Debug(kDTrace, me_, "....... Start .......");
 
   voter_ = std::make_unique<Voter>(peers, me_);
@@ -39,8 +39,7 @@ Raft::~Raft() {
     ldwlt_.join();
   }
 
-//  pool_.Wait();
-
+  //  pool_.Wait();
 }
 
 RequestVoteReply Raft::RequestVote(const RequestVoteArgs &args) {
@@ -77,7 +76,8 @@ RequestVoteReply Raft::RequestVote(const RequestVoteArgs &args) {
 AppendEntryReply Raft::AppendEntries(const AppendEntryArgs &args) {
   Logger::Debug(kDInfo, me_,
                 fmt::format("Receive AE from Leader {} for term {} commit {} prevLogIdx {} prevLogTerm {} hearbeat {} ",
-                            args.leader_id_, args.leader_term_, args.commit_, args.prev_log_idx_, args.prev_log_term_, args.hearbeat_));
+                            args.leader_id_, args.leader_term_, args.commit_, args.prev_log_idx_, args.prev_log_term_,
+                            args.hearbeat_));
   bool persist_changes = false;
   AppendEntryReply reply;
 
@@ -167,6 +167,9 @@ void Raft::TransitionToLeader() {
   l.unlock();
 
   Logger::Debug(kDTerm, me_, fmt::format("I am a leader now with term {}", term));
+
+  // just ignore all the pending task since we just about to enter a new term now
+//  pool_.Drain();
 
   if (hbt_.joinable()) {
     hbt_.detach();

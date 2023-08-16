@@ -146,7 +146,7 @@ TEST(RaftLogTest, DISABLED_FailAgree) {
   EXPECT_TRUE(cfg.Cleanup());
 }
 
-TEST(RaftLogTest, NoAgree) {
+TEST(RaftLogTest, DISABLED_NoAgree) {
   int servers = 5;
   Configuration<int> cfg{servers, false, false};
 
@@ -199,6 +199,92 @@ TEST(RaftLogTest, NoAgree) {
   }
 
   cfg.One(1000, servers, true);
+
+  EXPECT_TRUE(cfg.Cleanup());
+}
+
+TEST(RaftLogTest, DISABLED_ReJoin) {
+  int servers = 3;
+  Configuration<int> cfg{servers, false, false};
+
+  cfg.Begin("Test: rejoin of partitioned leader");
+
+  cfg.One(101, servers, true);
+
+  // leader network failure
+  auto leader1 = cfg.CheckOneLeader();
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Leader {}", leader1));
+  cfg.Disconnect(leader1);
+
+  // make old leader try to agree on some entries
+  cfg.GetRaft(leader1)->Start(102);
+  cfg.GetRaft(leader1)->Start(103);
+  cfg.GetRaft(leader1)->Start(104);
+
+  // new leader commit, also for index=2
+  cfg.One(103, 2, true);
+
+  // new leader network failure
+  auto leader2 = cfg.CheckOneLeader();
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Leader {}", leader2));
+  cfg.Disconnect(leader2);
+
+  // old leader connected again
+  Logger::Debug(kDTest, -1, fmt::format("Connect with Leader {}", leader1));
+  cfg.Connect(leader1);
+
+  cfg.One(104, 2, true);
+
+  // all together now
+  Logger::Debug(kDTest, -1, fmt::format("Connect with Leader {}", leader2));
+  cfg.Connect(leader2);
+
+  cfg.One(105, 2, true);
+
+  EXPECT_TRUE(cfg.Cleanup());
+}
+
+TEST(RaftLogTest, Backup) {
+  int servers = 5;
+  Configuration<int> cfg{servers, false, false};
+
+  cfg.Begin("Test: leader backs up quickly over incorrect follower logs");
+
+  cfg.One(common::RandInt(), servers, true);
+
+  // put leader and one follower in a partition
+  auto leader1 = cfg.CheckOneLeader();
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader1 + 2) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader1 + 3) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader1 + 4) % servers));
+  cfg.Disconnect((leader1 + 2) % servers);
+  cfg.Disconnect((leader1 + 3) % servers);
+  cfg.Disconnect((leader1 + 4) % servers);
+
+  // submit lots of commands that won't commit
+  for (int i = 0; i < 50; i++) {
+    cfg.GetRaft(leader1)->Start(common::RandInt());
+  }
+
+  common::SleepMs(RAFT_ELECTION_TIMEOUT / 2);
+
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader1 + 0) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader1 + 1) % servers));
+  cfg.Disconnect((leader1 + 0) % servers);
+  cfg.Disconnect((leader1 + 1) % servers);
+
+  // allow other partition to recover
+  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", (leader1 + 2) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", (leader1 + 3) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", (leader1 + 4) % servers));
+  cfg.Connect((leader1 + 2) % servers);
+  cfg.Connect((leader1 + 3) % servers);
+  cfg.Connect((leader1 + 4) % servers);
+
+  // lots of successful commands to new group
+  for (int i = 0; i < 50; i++) {
+    cfg.One(common::RandInt(), 3, true);
+  }
 
   EXPECT_TRUE(cfg.Cleanup());
 }

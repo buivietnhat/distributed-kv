@@ -3,8 +3,8 @@
 #include <chrono>
 #include <ctime>
 #include <random>
-#include <thread>
 #include <sstream>
+#include <thread>
 
 namespace kv {
 
@@ -93,18 +93,19 @@ inline std::string ToString(const std::vector<T> vect) {
 }
 
 template <typename T>
-inline std::string ToString(const std::vector<std::pair<T,T>> vect) {
+inline std::string ToString(const std::vector<std::pair<T, T>> vect) {
   std::stringstream ss;
   ss << "[ ";
   for (const auto &[f, s] : vect) {
-    ss << "(" << f << "," << s << ")" << " ";
+    ss << "(" << f << "," << s << ")"
+       << " ";
   }
   ss << "]";
   return ss.str();
 }
 
 template <typename K, typename V>
-inline std::string ToString(const std::unordered_map<K,V> &map) {
+inline std::string ToString(const std::unordered_map<K, V> &map) {
   std::stringstream ss;
   ss << "[ ";
   for (const auto [k, v] : map) {

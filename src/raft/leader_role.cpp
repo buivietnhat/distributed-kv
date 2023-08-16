@@ -63,6 +63,8 @@ void Raft::LeaderWorkLoop() {
       return;
     }
 
+//    Logger::Debug(kDInfo, me_, fmt::format("Pool tasks size = {}", pool_.UnsafeSize()));
+
     auto [replica_list, start_idx] = NeedToRequestAppend();
     if (!replica_list.empty()) {
       l.unlock();
@@ -76,7 +78,7 @@ void Raft::LeaderWorkLoop() {
       RequestAppendEntries(replica_list, start_idx);
       l.lock();
     } else {
-      //      Logger::Debug(kDInfo, me_, "No need to send AE since all the replica is up-to-date");
+      Logger::Debug(kDInfo, me_, "No need to send AE since all the replica is up-to-date");
     }
     l.unlock();
 
@@ -186,11 +188,18 @@ AppendEntriesResult Raft::RequestAppendEntry(int server, int prev_log_idx, int p
       return result;
     }
 
+    // failed
     // first to check if I am outdated
     if (CheckOutdateAndTransitionToFollower(term, reply->term_)) {
       Logger::Debug(
           kDLeader, me_,
           fmt::format("Gave up the AE request since there's a server {} has a bigger term {}", server, reply->term_));
+      result.last_log_idx_ = -1;
+      return result;
+    }
+
+    if (lm_->GetStartIndex() != start_idx) {
+      Logger::Debug(kDTrace, me_, "Gave up the AE request since I just installed the Snapshot");
       result.last_log_idx_ = -1;
       return result;
     }
@@ -301,7 +310,8 @@ void Raft::RequestAppendEntries(const std::vector<int> &replica_list, int start_
   }
 
   for (auto server : replica_list) {
-    pool_.AddTask([&, server, start_idx, log_mu, logs_accepted, logs_finished, last_log_idx, log_cond] {
+    thread_registry_.RegisterNewThread([&, server, start_idx, log_mu, logs_accepted, logs_finished, last_log_idx,
+                                        log_cond] {
       auto log_finish_func = [&] {
         std::unique_lock log_lock(*log_mu);
         *logs_finished += 1;
@@ -393,7 +403,7 @@ void Raft::RequestAppendEntries(const std::vector<int> &replica_list, int start_
   // or been killed, or not a leader anymore
   std::unique_lock log_lock(*log_mu);
   log_cond->wait(log_lock, [&] {
-    return Killed() || !IsLeader() || *logs_accepted > peers_.size() / 2 || *logs_finished >= peers_.size();
+    return Killed() || !IsLeader() || *logs_accepted > peers_.size() / 2 || *logs_finished >= replica_list.size();
   });
 
   Logger::Debug(kDTrace, me_,
@@ -427,7 +437,9 @@ void Raft::RequestCommits(const std::vector<int> &server_list, int index, int st
       continue;
     }
 
-    pool_.AddTask([&, s, index, prev_log_term] { RequestCommit(s, index, prev_log_term); });
+    //    pool_.AddTask([&, s, index, prev_log_term] { RequestCommit(s, index, prev_log_term); });
+    //        std::thread([&, s, index, prev_log_term] { RequestCommit(s, index, prev_log_term); }).detach();
+    thread_registry_.RegisterNewThread([&, s, index, prev_log_term] { RequestCommit(s, index, prev_log_term); });
   }
 
   if (self_commit) {

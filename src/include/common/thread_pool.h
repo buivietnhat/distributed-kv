@@ -27,6 +27,17 @@ class ThreadPool {
     }
   }
 
+  void Drain() {
+    std::lock_guard l(m_);
+    while (!task_queue_.empty()) {
+      task_queue_.pop_front();
+    }
+  }
+
+  uint32_t UnsafeSize() const {
+    return task_queue_.size();
+  }
+
   ~ThreadPool() {
     finished_ = true;
     cond_.notify_all();
