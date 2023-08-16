@@ -3,7 +3,7 @@
 
 namespace kv::raft {
 
-TEST(RaftLogTest, DISABLED_BasicAgreement) {
+TEST(RaftLogTest, BasicAgreement) {
   int servers = 3;
   Configuration<int> cfg{servers, false, false};
 
@@ -27,7 +27,7 @@ TEST(RaftLogTest, DISABLED_BasicAgreement) {
   EXPECT_TRUE(cfg.Cleanup());
 }
 
-TEST(RaftLogTest, DISABLED_FollowerFailure) {
+TEST(RaftLogTest, FollowerFailure) {
   int servers = 3;
   Configuration<int> cfg{servers, false, false};
 
@@ -72,7 +72,7 @@ TEST(RaftLogTest, DISABLED_FollowerFailure) {
   EXPECT_TRUE(cfg.Cleanup());
 }
 
-TEST(RaftLogTest, DISABLED_LeaderFailure) {
+TEST(RaftLogTest, LeaderFailure) {
   int servers = 3;
   Configuration<int> cfg{servers, false, false};
 
@@ -112,7 +112,7 @@ TEST(RaftLogTest, DISABLED_LeaderFailure) {
 }
 
 // test that a follower participates after disconnnect and re-connect
-TEST(RaftLogTest, DISABLED_FailAgree) {
+TEST(RaftLogTest, FailAgree) {
   int servers = 3;
   Configuration<int> cfg{servers, false, false};
 
@@ -146,7 +146,7 @@ TEST(RaftLogTest, DISABLED_FailAgree) {
   EXPECT_TRUE(cfg.Cleanup());
 }
 
-TEST(RaftLogTest, DISABLED_NoAgree) {
+TEST(RaftLogTest, NoAgree) {
   int servers = 5;
   Configuration<int> cfg{servers, false, false};
 
@@ -203,7 +203,7 @@ TEST(RaftLogTest, DISABLED_NoAgree) {
   EXPECT_TRUE(cfg.Cleanup());
 }
 
-TEST(RaftLogTest, DISABLED_ReJoin) {
+TEST(RaftLogTest, ReJoin) {
   int servers = 3;
   Configuration<int> cfg{servers, false, false};
 
@@ -285,6 +285,48 @@ TEST(RaftLogTest, Backup) {
   for (int i = 0; i < 50; i++) {
     cfg.One(common::RandInt(), 3, true);
   }
+
+  // now another partitioned leader and one follower
+  auto leader2 = cfg.CheckOneLeader();
+  auto other = (leader1 + 2) % servers;
+  if (leader2 == other) {
+    other = (leader2 + 1) % servers;
+  }
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", other));
+  cfg.Disconnect(other);
+
+  // lots more commands that won't commit
+  for (int i = 0; i < 50; i++) {
+    cfg.GetRaft(leader2)->Start(common::RandInt());
+  }
+
+  common::SleepMs(RAFT_ELECTION_TIMEOUT / 2);
+
+  // bring original leader back to life
+  for (int i = 0; i < servers; i++) {
+    Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", i));
+    cfg.Disconnect(i);
+  }
+
+  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", (leader1 + 0) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", (leader1 + 1) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", other));
+  cfg.Connect((leader1 + 0) % servers);
+  cfg.Connect((leader1 + 1) % servers);
+  cfg.Connect(other);
+
+  // lots of successul commands to new group
+  for (int i = 0; i < 50; i++) {
+    cfg.One(common::RandInt(), 3, true);
+  }
+
+  // now everyone
+  for (int i = 0; i < servers; i++) {
+    Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", i));
+    cfg.Connect(i);
+  }
+
+  cfg.One(common::RandInt(), servers, true);
 
   EXPECT_TRUE(cfg.Cleanup());
 }

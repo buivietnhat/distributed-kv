@@ -78,7 +78,7 @@ void Raft::LeaderWorkLoop() {
       RequestAppendEntries(replica_list, start_idx);
       l.lock();
     } else {
-      Logger::Debug(kDInfo, me_, "No need to send AE since all the replica is up-to-date");
+//      Logger::Debug(kDInfo, me_, "No need to send AE since all the replica is up-to-date");
     }
     l.unlock();
 
@@ -406,9 +406,9 @@ void Raft::RequestAppendEntries(const std::vector<int> &replica_list, int start_
     return Killed() || !IsLeader() || *logs_accepted > peers_.size() / 2 || *logs_finished >= replica_list.size();
   });
 
-  Logger::Debug(kDTrace, me_,
-                fmt::format("Request AEs return with Killed {}, IsLeader {}, LogsAccepted {}, LogFinished {}", Killed(),
-                            IsLeader(), *logs_accepted, *logs_finished));
+//  Logger::Debug(kDTrace, me_,
+//                fmt::format("Request AEs return with Killed {}, IsLeader {}, LogsAccepted {}, LogFinished {}", Killed(),
+//                            IsLeader(), *logs_accepted, *logs_finished));
 }
 
 void Raft::RequestCommits(const std::vector<int> &server_list, int index, int start_idx) {

@@ -19,7 +19,7 @@ class ThreadRegistry {
 
   void RegisterNewThread(std::function<void(void)> task) {
     std::lock_guard lock(mu_);
-    threads_.emplace_back(task);
+    threads_.emplace_back(std::move(task));
   }
 
   ~ThreadRegistry() {
