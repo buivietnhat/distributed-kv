@@ -10,7 +10,7 @@ class MockingPersister : public PersistentInterface {
  public:
   MockingPersister() = default;
 
-  MockingPersister(raft::RaftPersistState state, raft::Snapshot snapshot)
+  MockingPersister(std::optional<raft::RaftPersistState> state, std::optional<raft::Snapshot> snapshot)
       : state_(std::move(state)), snapshot_(std::move(snapshot)) {}
 
   MockingPersister(const MockingPersister &other) {
@@ -23,9 +23,9 @@ class MockingPersister : public PersistentInterface {
     state_ = state;
   }
 
-  void ReadRaftState(raft::RaftPersistState *state) const override {
+  std::optional<raft::RaftPersistState> ReadRaftState() const override {
     std::lock_guard lock(mu_);
-    *state = state_;
+    return state_;
   }
 
   void SaveRaftSnapshot(const raft::Snapshot &snapshot) override {
@@ -33,13 +33,19 @@ class MockingPersister : public PersistentInterface {
     snapshot_ = snapshot;
   }
 
-  void ReadRaftSnapshot(raft::Snapshot *snapshot) const override {
+  std::optional<raft::Snapshot> ReadRaftSnapshot() const override {
     std::lock_guard lock(mu_);
-    *snapshot = snapshot_;
+    return snapshot_;
   }
 
-  raft::RaftPersistState state_;
-  raft::Snapshot snapshot_;
+  void Save(const raft::RaftPersistState &state, const raft::Snapshot &snapshot) override {
+    std::lock_guard lock(mu_);
+    state_ = state;
+    snapshot_ = snapshot;
+  }
+
+  std::optional<raft::RaftPersistState> state_;
+  std::optional<raft::Snapshot> snapshot_;
   mutable std::mutex mu_;
 };
 

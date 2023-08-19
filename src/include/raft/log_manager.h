@@ -172,9 +172,15 @@ class LogManager {
     return static_cast<int>(log_.size() - 1 + start_idx_);
   }
 
+  inline const std::vector<LogEntry> &DoGetLogs() const { return log_; }
+
   inline void Kill() { dead_ = true; }
 
   inline bool Killed() const { return dead_; }
+
+  inline void DoSetLogs(std::vector<LogEntry> log) {
+    log_ = std::move(log);
+  }
 
  private:
   void GenerateConflictingMsgReply(int conflicting_index, AppendEntryReply *reply);

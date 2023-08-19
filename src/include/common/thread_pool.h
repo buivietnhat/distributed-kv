@@ -34,9 +34,7 @@ class ThreadPool {
     }
   }
 
-  uint32_t UnsafeSize() const {
-    return task_queue_.size();
-  }
+  uint32_t UnsafeSize() const { return task_queue_.size(); }
 
   ~ThreadPool() {
     finished_ = true;

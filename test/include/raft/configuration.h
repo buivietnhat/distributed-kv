@@ -106,7 +106,7 @@ class Configuration {
     auto to = 10;
     for (int iters = 0; iters < 30; iters++) {
       auto [nd, _] = NCommited(index);
-      if (nd > n) {
+      if (nd >= n) {
         break;
       }
       common::SleepMs(to);
@@ -161,6 +161,7 @@ class Configuration {
         auto t1 = common::Now();
         while (common::ElapsedTimeS(t1, common::Now()) < 2) {
           auto [nd, cmd1] = NCommited(index);
+//          Logger::Debug(kDTest, -1, fmt::format("index = {}, nd = {}", index, nd));
           if (nd > 0 && nd >= expected_server) {
             // commited
             if (std::any_cast<CommandType>(cmd1) == std::any_cast<CommandType>(cmd)) {
@@ -229,22 +230,20 @@ class Configuration {
     Disconnect(server_num);
     net_->DeleteServer(std::to_string(server_num));
 
-    std::lock_guard lock(mu_);
+    std::unique_lock lock(mu_);
 
     auto *rf = rafts_[server_num].get();
     if (rf != nullptr) {
-      mu_.lock();
+      lock.unlock();
       rf->Kill();
-      mu_.unlock();
+      lock.lock();
       rafts_[server_num] = nullptr;
     }
 
     if (saved_[server_num] != nullptr) {
-      raft::RaftPersistState state;
-      raft::Snapshot snapshot;
-      saved_[server_num]->ReadRaftState(&state);
-      saved_[server_num]->ReadRaftSnapshot(&snapshot);
-      saved_[server_num] = std::make_unique<storage::MockingPersister>(std::move(state), std::move(snapshot));
+      auto state = saved_[server_num]->ReadRaftState();
+      auto snap = saved_[server_num]->ReadRaftSnapshot();
+      saved_[server_num] = std::make_unique<storage::MockingPersister>(std::move(state), std::move(snap));
     }
   }
 
@@ -273,14 +272,12 @@ class Configuration {
     // but copy old persister's content so that we always
     // pass Make() the last persisted state.
     if (saved_[server_num] != nullptr) {
-      raft::RaftPersistState state;
-      raft::Snapshot snapshot;
-      saved_[server_num]->ReadRaftState(&state);
-      saved_[server_num]->ReadRaftSnapshot(&snapshot);
-      saved_[server_num] = std::make_unique<storage::MockingPersister>(std::move(state), std::move(snapshot));
+      auto state = saved_[server_num]->ReadRaftState();
+      auto snap = saved_[server_num]->ReadRaftSnapshot();
+      saved_[server_num] = std::make_unique<storage::MockingPersister>(std::move(state), std::move(snap));
 
-      if (!snapshot.Empty()) {
-        auto err = IngestSnap(server_num, snapshot, -1);
+      if (snap && !snap->Empty()) {
+        auto err = IngestSnap(server_num, *snap, -1);
         if (err != "") {
           throw std::runtime_error(fmt::format("{}", err));
         }
@@ -291,6 +288,13 @@ class Configuration {
 
     mu_.unlock();
 
+    if (apply_threads_[server_num].joinable()) {
+      apply_finished_ = true;
+      apply_chs_[server_num]->Enqueue({});
+      apply_threads_[server_num].join();
+      apply_finished_ = false;
+    }
+
     apply_chs_[server_num] = std::make_shared<common::ConcurrentBlockingQueue<raft::ApplyMsg>>();
     auto rf = std::make_unique<Raft>(std::move(ends), server_num, saved_[server_num].get(), apply_chs_[server_num]);
 
@@ -298,9 +302,7 @@ class Configuration {
     rafts_[server_num] = std::move(rf);
     mu_.unlock();
 
-    //    std::thread apply_thread(applier, server_num, apply_chs_[server_num]);
     apply_threads_[server_num] = std::thread(applier, server_num, apply_chs_[server_num]);
-    //    apply_thread.detach();
 
     auto server = std::make_unique<network::Server>();
     server->AddRaft(rafts_[server_num].get());
@@ -318,6 +320,7 @@ class Configuration {
   bool Cleanup() {
     if (!finished_) {
       finished_ = true;
+      apply_finished_ = true;
 
       for (int i = 0; i < num_servers_; i++) {
         if (rafts_[i] != nullptr) {
@@ -370,8 +373,6 @@ class Configuration {
       for (const auto &[term, leaders] : leaders_map) {
         if (leaders.size() > 1) {
           throw CONFIG_EXCEPTION(fmt::format("term {} has {}(>1) leaders\n", term, leaders.size()));
-          //          std::cout << fmt::format("term {} has {}(>1) leaders\n", term, leaders.size());
-          return -1;
         }
 
         if (term > last_term_with_leader) {
@@ -384,9 +385,7 @@ class Configuration {
       }
     }
 
-    //    std::cout << fmt::format("expected one leader, got none\n");
     throw CONFIG_EXCEPTION("expected one leader, got none");
-    return -1;
   }
 
   std::optional<int> CheckTerm() {
@@ -418,6 +417,12 @@ class Configuration {
       }
     }
     return true;
+  }
+
+  inline std::function<void(int, std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>>)> GetApplier() {
+    return [&](int server_num, std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>> apply_channel) {
+      Applier(server_num, apply_channel);
+    };
   }
 
  private:
@@ -455,12 +460,12 @@ class Configuration {
   }
 
   void ApplierSnap(int server_num, std::shared_ptr<common::ConcurrentBlockingQueue<raft::ApplyMsg>>) {
-    while (!finished_) {
+    while (!apply_finished_) {
     }
   }
 
   void Applier(int server_num, std::shared_ptr<common::ConcurrentBlockingQueue<raft::ApplyMsg>> apply_ch) {
-    while (!finished_) {
+    while (!apply_finished_) {
       raft::ApplyMsg m;
       apply_ch->Dequeue(&m);
       if (m.command_valid_ == false) {
@@ -483,6 +488,7 @@ class Configuration {
 
   std::mutex mu_;
   bool finished_{false};
+  bool apply_finished_{false};
   int num_servers_;
   std::unique_ptr<network::Network> net_;
   std::vector<std::unique_ptr<Raft>> rafts_;

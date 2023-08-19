@@ -58,6 +58,7 @@ include_directories(
         ${DISTRIBUTEDKV_SRC_INCLUDE_DIR}
         ${DISTRIBUTEDKV_TEST_INCLUDE_DIR}
         ${PROJECT_SOURCE_DIR}/third_party/fmt/include
+        ${PROJECT_SOURCE_DIR}/third_party/json/include
 )
 
 enable_testing()

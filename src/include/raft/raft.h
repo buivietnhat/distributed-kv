@@ -22,7 +22,14 @@ class PersistentInterface;
 
 namespace kv::raft {
 
-struct RaftPersistState {};
+struct RaftPersistState {
+  int term_{0};
+  int voted_for_{0};
+  int log_start_idx_{0};
+  int last_included_idx_{0};
+  int last_included_term_{0};
+  std::vector<LogEntry> logs_;
+};
 
 struct RaftState {
   int term_;
@@ -93,7 +100,10 @@ class Raft {
 
   std::tuple<int, int, bool> Start(std::any command);
 
-  inline void Kill() { dead_ = true; }
+  inline void Kill() {
+    lm_->Kill();
+    dead_ = true;
+  }
 
   ~Raft();
 
@@ -112,7 +122,9 @@ class Raft {
 
   std::pair<std::vector<int>, int> NeedToRequestAppend() const;
 
-  void Persist(std::vector<std::byte> snapshot = {}) const;
+  void Persist(const Snapshot &snapshot = {}) const;
+
+  void ReadPersistState(const RaftPersistState &state);
 
   inline void InitMetaDataForLeader() {
     auto last_log_idx = lm_->GetLastLogIdx();
@@ -175,7 +187,6 @@ class Raft {
   std::thread hbt_;
   std::thread ldwlt_;
 
-//  common::ThreadPool pool_;
   common::ThreadRegistry thread_registry_;
 
   static constexpr int NUM_THREAD = 5;

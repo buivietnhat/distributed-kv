@@ -53,6 +53,11 @@ class Voter {
 
   inline void GiveUp() { give_up_ = true; }
 
+  inline int GetVoteFor() const {
+    std::lock_guard lock(mu_);
+    return voted_for_;
+  }
+
   inline void VoteFor(int server) {
     std::lock_guard lock(mu_);
     voted_for_ = server;

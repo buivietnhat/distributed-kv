@@ -19,6 +19,13 @@ Raft::Raft(std::vector<network::ClientEnd *> peers, uint32_t me, storage::Persis
   voter_ = std::make_unique<Voter>(peers, me_);
   lm_ = std::make_unique<LogManager>(me_, apply_channel);
 
+  // initialize from state persisted before a crash
+
+  auto state = persister_->ReadRaftState();
+  if (state) {
+    ReadPersistState(*state);
+  }
+
   tickert_ = std::thread([&] { Ticker(); });
 }
 
@@ -38,8 +45,6 @@ Raft::~Raft() {
   if (ldwlt_.joinable()) {
     ldwlt_.join();
   }
-
-  //  pool_.Wait();
 }
 
 RequestVoteReply Raft::RequestVote(const RequestVoteArgs &args) {
@@ -168,9 +173,6 @@ void Raft::TransitionToLeader() {
 
   Logger::Debug(kDTerm, me_, fmt::format("I am a leader now with term {}", term));
 
-  // just ignore all the pending task since we just about to enter a new term now
-//  pool_.Drain();
-
   if (hbt_.joinable()) {
     hbt_.detach();
   }
@@ -223,6 +225,40 @@ void Raft::Ticker() {
   }
 }
 
-void Raft::Persist(std::vector<std::byte> snapshot) const {}
+void Raft::Persist(const Snapshot &snapshot) const {
+//  Logger::Debug(kDPersist, me_, "Persisting data ...");
+  std::unique_lock l(mu_);
+  RaftPersistState state;
+  state.term_ = term_;
+  state.voted_for_ = voter_->GetVoteFor();
+
+  lm_->Lock();
+  state.log_start_idx_ = lm_->DoGetStartIndex();
+  state.last_included_idx_ = lm_->DoGetLastIncludedIndex();
+  state.last_included_term_ = lm_->DoGetLastIncludedTerm();
+  state.logs_ = lm_->DoGetLogs();
+  lm_->Unlock();
+
+  if (!snapshot.Empty()) {
+    persister_->Save(state, snapshot);
+  } else {
+    persister_->SaveRaftState(state);
+  }
+}
+
+void Raft::ReadPersistState(const RaftPersistState &state) {
+  term_ = state.term_;
+  voter_->VoteFor(state.voted_for_);
+  lm_->DoSetStartIdx(state.log_start_idx_);
+  lm_->DoSetLastIncludedIdx(state.last_included_idx_);
+  lm_->DoSetLastIncludedTerm(state.last_included_term_);
+  lm_->DoSetLogs(state.logs_);
+
+  Logger::Debug(kDPersist, me_,
+                fmt::format("Restore term {}, voted for {}, logStartIdx {}, lastLogIdx {}, lastLogTerm {}, "
+                            "lastIncludedIdx {}, lastIncludedTerm {} from persisten state",
+                            state.term_, state.voted_for_, state.log_start_idx_, lm_->DoGetLastLogIdx(),
+                            lm_->GetLastLogTerm(), state.last_included_idx_, state.last_included_term_));
+}
 
 }  // namespace kv::raft
