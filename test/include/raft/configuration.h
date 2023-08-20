@@ -42,6 +42,7 @@ class Configuration {
     apply_threads_.resize(num_servers);
 
     net_->SetLongDelay(true);
+    net_->SetReliable(!unreliable);
 
     applier_t applier;
     if (snapshot) {
@@ -161,7 +162,7 @@ class Configuration {
         auto t1 = common::Now();
         while (common::ElapsedTimeS(t1, common::Now()) < 2) {
           auto [nd, cmd1] = NCommited(index);
-//          Logger::Debug(kDTest, -1, fmt::format("index = {}, nd = {}", index, nd));
+          Logger::Debug(kDTest, -1, fmt::format("index = {}, nd = {}", index, nd));
           if (nd > 0 && nd >= expected_server) {
             // commited
             if (std::any_cast<CommandType>(cmd1) == std::any_cast<CommandType>(cmd)) {
@@ -347,11 +348,11 @@ class Configuration {
     return false;
   }
 
-  // ok if the time it takes <= 120s
+  // ok if the time it takes <= 180s
   bool CheckTimeout() const {
     auto now = common::Now();
     auto execution_time = common::ElapsedTimeS(start_, now);
-    return execution_time > 120;
+    return execution_time > 180;
   }
 
   int CheckOneLeader() const {

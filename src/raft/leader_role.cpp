@@ -30,9 +30,11 @@ void Raft::SendHeartBeat(int server, int term) {
   args.leader_term_ = term;
 
   auto reply = DoRequestAppendEntry(server, args);
+
   if (reply && !reply->success_) {
     CheckOutdateAndTransitionToFollower(term, reply->term_);
   }
+
 }
 
 void Raft::BroadcastHeartBeats() {
@@ -51,7 +53,7 @@ void Raft::BroadcastHeartBeats() {
       }
     }
 
-    common::SleepMs(250);
+    common::SleepMs(150);
   }
 }
 
@@ -324,6 +326,7 @@ void Raft::RequestAppendEntries(const std::vector<int> &replica_list, int start_
         tentative_next_index_[server] = last_log_idx + 1;
         Logger::Debug(kDLeader, me_,
                       fmt::format("Gave up sending Logs to server {} since it has already been updated", server));
+        l.unlock();
         log_finish_func();
         return;
       }
