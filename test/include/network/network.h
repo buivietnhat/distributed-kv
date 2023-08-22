@@ -267,7 +267,7 @@ class Network {
   void ProcessRequest(RequestMessage req) {
     bool enable, reliable, longreordering;
     std::string servername;
-    auto *server = ReadEndnameInfo(req.endname_, &enable, &servername, &reliable, &longreordering);
+    auto server = ReadEndnameInfo(req.endname_, &enable, &servername, &reliable, &longreordering);
 
     if (enable && servername != "" && server != nullptr) {
       if (!reliable) {
@@ -298,14 +298,14 @@ class Network {
         cond.notify_one();
       });
 
-      *is_server_dead = IsServerDead(req.endname_, servername, server);
+      *is_server_dead = IsServerDead(req.endname_, servername, server.get());
 
       std::unique_lock l(m);
       while (true) {
         if (cond.wait_for(l, MS(100), [&] { return *reply_ok || *is_server_dead; })) {
           break;
         }
-        *is_server_dead = IsServerDead(req.endname_, servername, server);
+        *is_server_dead = IsServerDead(req.endname_, servername, server.get());
       }
 
       // wait until we have a reply or server is dead
@@ -339,13 +339,13 @@ class Network {
     }
   }
 
-  Server *ReadEndnameInfo(const std::string &endname, bool *enable, std::string *server_name, bool *reliable,
+  std::shared_ptr<Server> ReadEndnameInfo(const std::string &endname, bool *enable, std::string *server_name, bool *reliable,
                           bool *longreordering) {
-    Server *server{nullptr};
+    std::shared_ptr<Server> server;
     std::lock_guard lock(mu_);
     *server_name = connections_[endname];
     if (*server_name != "") {
-      server = servers_[*server_name].get();
+      server = servers_[*server_name];
     }
     *enable = enabled_[endname];
     *reliable = reliable_;
@@ -369,7 +369,7 @@ class Network {
   bool long_reordering_{false};
   std::unordered_map<std::string, std::unique_ptr<ClientEnd>> ends_;
   std::unordered_map<std::string, bool> enabled_;
-  std::unordered_map<std::string, std::unique_ptr<Server>> servers_;
+  std::unordered_map<std::string, std::shared_ptr<Server>> servers_;
   std::unordered_map<std::string, std::string> connections_;  // endname -> server name
   common::Channel<RequestMessage> chan_;
   std::thread dp_thread_;
