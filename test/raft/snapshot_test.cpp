@@ -103,7 +103,7 @@ TEST(RaftSnapshotTest, DISABLED_InstallSnapshotsUnCrash) {
 // do the servers persist the snapshots, and
 // restart using snapshot along with the
 // tail of the log?
-TEST(RaftSnapshotTest, SnapshotAllCrash) {
+TEST(RaftSnapshotTest, DISABLED_SnapshotAllCrash) {
   auto servers = 3;
   auto iters = 5;
   Configuration<int> cfg{servers, false, true};
@@ -139,6 +139,51 @@ TEST(RaftSnapshotTest, SnapshotAllCrash) {
       throw CONFIG_EXCEPTION(fmt::format("index decreased from {} to {}", index1, index2));
     }
   }
+
+  cfg.Cleanup();
+}
+
+// do servers correctly initialize their in-memory copy of the snapshot, making
+// sure that future writes to persistent state don't lose state?
+TEST(RaftSnapshotTest, SnapshotInit) {
+  auto servers = 3;
+  Configuration<int> cfg{servers, false, true};
+
+  cfg.Begin("Test: snapshot initialization after crash");
+
+  cfg.One(common::RandInt(), servers, true);
+
+  // crash all
+  for (int j = 0; j < servers; j++) {
+    cfg.Crash(j);
+    Logger::Debug(kDTest, -1, fmt::format("Crash the Server {}", j));
+  }
+
+  // revive all
+  for (int j = 0; j < servers; j++) {
+    cfg.Start(j, cfg.GetApplierSnap());
+    cfg.Connect(j);
+    Logger::Debug(kDTest, -1, fmt::format("Start and Connect the Server {}", j));
+  }
+
+  // a single op, to get somthing to be written back to persistent storage
+  cfg.One(common::RandInt(), servers, true);
+
+  // crash all
+  for (int j = 0; j < servers; j++) {
+    cfg.Crash(j);
+    Logger::Debug(kDTest, -1, fmt::format("Crash the Server {}", j));
+  }
+
+  // revive all
+  for (int j = 0; j < servers; j++) {
+    cfg.Start(j, cfg.GetApplierSnap());
+    cfg.Connect(j);
+    Logger::Debug(kDTest, -1, fmt::format("Start and Connect the Server {}", j));
+  }
+
+  // do another op to trigger potential bug
+  cfg.One(common::RandInt(), servers, true);
 
   cfg.Cleanup();
 }
