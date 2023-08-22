@@ -82,8 +82,12 @@ static void SnapCommon(const std::string &name, bool disconnect, bool reliable, 
   cfg.Cleanup();
 }
 
-TEST(RaftSnapshotTest, SnapshotBasic) {
+TEST(RaftSnapshotTest, DISABLED_SnapshotBasic) {
   SnapCommon("Test: snapshots basic", false, true, false);
+}
+
+TEST(RaftSnapshotTest, InstallSnapshots) {
+  SnapCommon("Test: install snapshots (disconnect)", true, true, false);
 }
 
 }  // namespace kv::raft

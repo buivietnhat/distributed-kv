@@ -444,7 +444,7 @@ void Raft::RequestCommits(const std::vector<int> &server_list, int index, int st
     lm_->Unlock();
 
     Persist();
-    if (curr_commit_idx < start_idx) {
+    if (curr_commit_idx + 1 < start_idx) {
       Logger::Debug(kDSnap, me_,
                     fmt::format("My StartIdx {} > CommitIdx {}, ApplySnap first", start_idx, curr_commit_idx));
       lm_->ApplyLatestSnap();

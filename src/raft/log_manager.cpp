@@ -182,7 +182,7 @@ void LogManager::GenerateConflictingMsgReply(int conflicting_index, AppendEntryR
   if (actual_conflicting_idx < static_cast<int>(log_.size())) {
     auto index = actual_conflicting_idx;
     auto conflicting_term = log_[index].term_;
-    while (log_[index].term_ == conflicting_term && index >= 0) {
+    while (log_[index].term_ == conflicting_term && index > 0) {
       index--;
     }
     reply->xindex_ = index + 1 + start_idx_;
