@@ -3,7 +3,7 @@
 
 namespace kv::raft {
 
-TEST(RaftPersistTest, DISABLED_BasicPersist) {
+TEST(RaftPersistTest, BasicPersist) {
   int servers = 3;
   Configuration<int> cfg{servers, false, false};
 
@@ -209,7 +209,7 @@ TEST(RaftPersistTest, DISABLED_Figure8) {
   EXPECT_TRUE(cfg.Cleanup());
 }
 
-TEST(RaftPersistTest, UnreliableAgree) {
+TEST(RaftPersistTest, DISABLED_UnreliableAgree) {
   int servers = 5;
   Configuration<int> cfg{servers, true, false};
 

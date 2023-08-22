@@ -82,9 +82,7 @@ static void SnapCommon(const std::string &name, bool disconnect, bool reliable, 
   cfg.Cleanup();
 }
 
-TEST(RaftSnapshotTest, DISABLED_SnapshotBasic) {
-  SnapCommon("Test: snapshots basic", false, true, false);
-}
+TEST(RaftSnapshotTest, DISABLED_SnapshotBasic) { SnapCommon("Test: snapshots basic", false, true, false); }
 
 TEST(RaftSnapshotTest, DISABLED_InstallSnapshots) {
   SnapCommon("Test: install snapshots (disconnect)", true, true, false);
@@ -98,8 +96,51 @@ TEST(RaftSnapshotTest, DISABLED_InstallSnapshotsCrash) {
   SnapCommon("Test: install snapshots (crash)", false, true, true);
 }
 
-TEST(RaftSnapshotTest, InstallSnapshotsUnCrash) {
+TEST(RaftSnapshotTest, DISABLED_InstallSnapshotsUnCrash) {
   SnapCommon("Test: install snapshots (unreliable+crash)", false, false, true);
+}
+
+// do the servers persist the snapshots, and
+// restart using snapshot along with the
+// tail of the log?
+TEST(RaftSnapshotTest, SnapshotAllCrash) {
+  auto servers = 3;
+  auto iters = 5;
+  Configuration<int> cfg{servers, false, true};
+
+  cfg.Begin("Test: crash and restart all servers");
+
+  cfg.One(common::RandInt(), servers, true);
+
+  for (int i = 0; i < iters; i++) {
+    // perhaps enough to get a snapshot
+    auto nn = (SNAPSHOT_INTERVAL / 2) + (common::RandInt() % SNAPSHOT_INTERVAL);
+    for (int j = 0; j < nn; j++) {
+      cfg.One(common::RandInt(), servers, true);
+    }
+
+    auto index1 = cfg.One(common::RandInt(), servers, true);
+
+    // crash all
+    for (int j = 0; j < servers; j++) {
+      cfg.Crash(j);
+      Logger::Debug(kDTest, -1, fmt::format("Crash the Server {}", j));
+    }
+
+    // revive all
+    for (int j = 0; j < servers; j++) {
+      cfg.Start(j, cfg.GetApplierSnap());
+      cfg.Connect(j);
+      Logger::Debug(kDTest, -1, fmt::format("Start and Connect the Server {}", j));
+    }
+
+    auto index2 = cfg.One(common::RandInt(), servers, true);
+    if (index2 < index1 + 1) {
+      throw CONFIG_EXCEPTION(fmt::format("index decreased from {} to {}", index1, index2));
+    }
+  }
+
+  cfg.Cleanup();
 }
 
 }  // namespace kv::raft

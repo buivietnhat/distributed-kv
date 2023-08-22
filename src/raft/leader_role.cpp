@@ -179,7 +179,7 @@ AppendEntriesResult Raft::RequestAppendEntry(int server, int prev_log_idx, int p
       result.last_log_idx_ = -1;
       l.lock();
       // reset the tentative commit index
-      tentative_next_index_[server] = 0;
+      tentative_cmit_index_[server] = 0;
       l.unlock();
       return result;
     }

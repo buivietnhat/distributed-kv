@@ -44,6 +44,8 @@ class Configuration {
     apply_chs_.resize(num_servers);
     apply_threads_.resize(num_servers);
 
+    apply_finished_ = std::vector<bool>(num_servers, false);
+
     net_->SetLongDelay(true);
     net_->SetReliable(!unreliable);
 
@@ -293,10 +295,10 @@ class Configuration {
     mu_.unlock();
 
     if (apply_threads_[server_num].joinable()) {
-      apply_finished_ = true;
+      apply_finished_[server_num] = true;
       apply_chs_[server_num]->Enqueue({});
       apply_threads_[server_num].join();
-      apply_finished_ = false;
+      apply_finished_[server_num] = false;
     }
 
     apply_chs_[server_num] = std::make_shared<common::ConcurrentBlockingQueue<raft::ApplyMsg>>();
@@ -324,7 +326,7 @@ class Configuration {
   bool Cleanup() {
     if (!finished_) {
       finished_ = true;
-      apply_finished_ = true;
+      apply_finished_ = std::vector<bool>(num_servers_, true);
 
       for (int i = 0; i < num_servers_; i++) {
         if (rafts_[i] != nullptr) {
@@ -508,7 +510,7 @@ class Configuration {
       throw CONFIG_EXCEPTION(fmt::format("Raft {} is nullptr", server_num));
     }
 
-    while (!apply_finished_) {
+    while (!apply_finished_[server_num]) {
       raft::ApplyMsg m;
       apply_ch->Dequeue(&m);
       std::string err_msg = "";
@@ -565,7 +567,7 @@ class Configuration {
   }
 
   void Applier(int server_num, std::shared_ptr<common::ConcurrentBlockingQueue<raft::ApplyMsg>> apply_ch) {
-    while (!apply_finished_) {
+    while (!apply_finished_[server_num]) {
       raft::ApplyMsg m;
       apply_ch->Dequeue(&m);
       if (m.command_valid_ == false) {
@@ -588,7 +590,7 @@ class Configuration {
 
   std::mutex mu_;
   bool finished_{false};
-  bool apply_finished_{false};
+  std::vector<bool> apply_finished_;
   int num_servers_;
   std::unique_ptr<network::Network> net_;
   std::vector<std::unique_ptr<Raft>> rafts_;
