@@ -4,6 +4,7 @@
 
 #include "common/thread_pool.h"
 #include "common/util.h"
+#include "raft/common.h"
 
 namespace kv::network {
 
@@ -13,25 +14,6 @@ class ClientEnd;
 
 namespace kv::raft {
 
-struct RequestVoteArgs {
-  int term_;
-  int candidate_;
-  int last_log_index_;
-  int last_log_term_;
-};
-
-struct RequestVoteReply {
-  int term_;
-  bool vote_granted_;
-};
-
-struct VoteResult {
-  int server_;
-  int term_;
-  bool vote_granted_;
-};
-
-struct InternalState;
 class Voter {
  public:
   Voter(std::vector<network::ClientEnd *> peers, int me);

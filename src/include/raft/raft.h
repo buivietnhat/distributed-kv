@@ -9,77 +9,13 @@
 #include "common/container/concurrent_blocking_queue.h"
 #include "common/thread_pool.h"
 #include "common/thread_registry.h"
+#include "raft/common.h"
 #include "raft/log_manager.h"
 #include "raft/voter.h"
-
-namespace kv::network {
-class ClientEnd;
-}
-
-namespace kv::storage {
-class PersistentInterface;
-}
+#include "network/rpc_interface.h"
+#include "storage/persistent_interface.h"
 
 namespace kv::raft {
-
-struct RaftPersistState {
-  int term_{0};
-  int voted_for_{0};
-  int log_start_idx_{0};
-  int last_included_idx_{0};
-  int last_included_term_{0};
-  std::vector<LogEntry> logs_;
-};
-
-struct RaftState {
-  int term_;
-  bool is_leader_;
-};
-
-struct Snapshot {
-  std::vector<std::byte> data;
-  bool Empty() const { return data.empty(); }
-};
-
-struct AppendEntryArgs {
-  bool hearbeat_;
-  bool commit_;
-  int leader_id_;
-  int leader_term_;
-  int prev_log_idx_;
-  int prev_log_term_;
-  int leader_commit_idx_;
-  std::vector<LogEntry> entries_;
-};
-
-struct AppendEntryReply {
-  int term_;  // the conflicting term
-  bool success_;
-  int xindex_;  // index of the first entry of the conflicting term
-  int xlen_;    // length of the follower's log
-};
-
-enum class Role : uint8_t { RESERVED, LEADER, FOLLOWER, CANDIDATE };
-
-inline std::string ToString(Role role) {
-  switch (role) {
-    case Role::LEADER:
-      return "Leader";
-    case Role::FOLLOWER:
-      return "Follower";
-    case Role::CANDIDATE:
-      return "Candidate";
-    default:
-      return "";
-  }
-}
-
-struct InternalState {
-  int last_log_index_;
-  int last_log_term_;
-  int term_;
-  Role role;
-};
 
 class Raft {
  public:
@@ -96,9 +32,15 @@ class Raft {
 
   RaftState GetState() const;
 
-  int Test(int input) { return input + 100; }
-
   std::tuple<int, int, bool> Start(std::any command);
+
+  void DoSnapshot(int index, const Snapshot &snap);
+
+  std::optional<InstallSnapshotReply> RequestInstallSnapshot(int server, const InstallSnapshotArgs &args) const;
+
+  InstallSnapshotReply InstallSnapshot(const InstallSnapshotArgs &args);
+
+  int Test(int input) { return input + 100; }
 
   inline void Kill() {
     lm_->Kill();
@@ -124,7 +66,18 @@ class Raft {
 
   void Persist(const Snapshot &snapshot = {}) const;
 
+  void SendLatestSnapshot(int server);
+
   void ReadPersistState(const RaftPersistState &state);
+
+  void ReadPersistSnap(const Snapshot &snap);
+
+  void SendSnapshot(int server, int last_included_index, int last_included_term, int leader_term,
+                    std::shared_ptr<Snapshot> snapshot);
+
+  void SendSnapshots(const std::vector<int> &replica_list, int last_included_index, const Snapshot &snapshot);
+
+  void CheckAndSendInstallSnapshot(int last_included_index, const Snapshot &snapshot);
 
   inline void InitMetaDataForLeader() {
     auto last_log_idx = lm_->GetLastLogIdx();

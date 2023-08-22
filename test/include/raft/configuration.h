@@ -11,6 +11,7 @@
 #include "common/logger.h"
 #include "common/util.h"
 #include "network/network.h"
+#include "nlohmann/json.hpp"
 #include "raft/raft.h"
 #include "storage/mocking_persister.h"
 
@@ -19,6 +20,8 @@ using namespace std::chrono_literals;
 namespace kv::raft {
 
 static constexpr int RAFT_ELECTION_TIMEOUT = 1000;
+static constexpr int SNAPSHOT_INTERVAL = 10;
+static constexpr int MAXLOGSIZE = 2000;
 
 using common::Logger;
 
@@ -162,7 +165,7 @@ class Configuration {
         auto t1 = common::Now();
         while (common::ElapsedTimeS(t1, common::Now()) < 2) {
           auto [nd, cmd1] = NCommited(index);
-          Logger::Debug(kDTest, -1, fmt::format("index = {}, nd = {}", index, nd));
+          //          Logger::Debug(kDTest, -1, fmt::format("index = {}, nd = {}", index, nd));
           if (nd > 0 && nd >= expected_server) {
             // commited
             if (std::any_cast<CommandType>(cmd1) == std::any_cast<CommandType>(cmd)) {
@@ -426,14 +429,50 @@ class Configuration {
     };
   }
 
+  inline std::function<void(int, std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>>)> GetApplierSnap() {
+    return [&](int server_num, std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>> apply_channel) {
+      ApplierSnap(server_num, apply_channel);
+    };
+  }
+
+  // Maximum log size across all servers
+  inline int LogSize() const {
+    int logsize = 0;
+    for (int i = 0; i < num_servers_; i++) {
+      auto n = saved_[i]->RaftStateSize();
+      if (n > logsize) {
+        logsize = n;
+      }
+    }
+    return logsize;
+  }
+
  private:
   std::string IngestSnap(int server_num, const raft::Snapshot &snapshot, int index) {
     if (snapshot.Empty()) {
       throw std::runtime_error("empty snapshot");
     }
 
-    // TODO(nhat): find a way to to work with serialized data
+    int last_included_index{-1};
+    std::vector<CommandType> xlog;
 
+    try {
+      auto json_snap = nlohmann::json::parse(snapshot.data_);
+      last_included_index = json_snap["last_included_index"].get<int>();
+      xlog = std::move(json_snap["xlog"]).get<std::vector<CommandType>>();
+    } catch (...) {
+      return "snapshot Decode() error";
+    }
+
+    if (index != -1 && index != last_included_index) {
+      return fmt::format("server {} snapshot doesn't match m.SnapshotIndex", server_num);
+    }
+
+    logs_[server_num] = std::unordered_map<int, std::any>();
+    for (uint32_t j = 0; j < xlog.size(); j++) {
+      logs_[server_num][j] = xlog[j];
+    }
+    last_applied_[server_num] = last_included_index;
     return "";
   }
 
@@ -460,8 +499,68 @@ class Configuration {
     return {err_msg, prevok};
   }
 
-  void ApplierSnap(int server_num, std::shared_ptr<common::ConcurrentBlockingQueue<raft::ApplyMsg>>) {
+  void ApplierSnap(int server_num, std::shared_ptr<common::ConcurrentBlockingQueue<raft::ApplyMsg>> apply_ch) {
+    std::unique_lock l(mu_);
+    auto rf = rafts_[server_num].get();
+    l.unlock();
+
+    if (rf == nullptr) {
+      throw CONFIG_EXCEPTION(fmt::format("Raft {} is nullptr", server_num));
+    }
+
     while (!apply_finished_) {
+      raft::ApplyMsg m;
+      apply_ch->Dequeue(&m);
+      std::string err_msg = "";
+      if (m.snapshot_valid_) {
+        l.lock();
+        err_msg = IngestSnap(server_num, m.snapshot_, m.snapshot_index_);
+        l.unlock();
+      } else if (m.command_valid_) {
+        if (m.command_index_ != last_applied_[server_num] + 1) {
+          err_msg = fmt::format("server {} apply out of order, expected index {}, got {}", server_num,
+                                last_applied_[server_num] + 1, m.command_index_);
+        }
+
+        if (err_msg == "") {
+          l.lock();
+          auto [err, prevok] = CheckLogs(server_num, m);
+          err_msg = std::move(err);
+          l.unlock();
+
+          if (m.command_index_ > 1 && prevok == false) {
+            err_msg = fmt::format("server {} apply out of order {}", server_num, m.command_index_);
+          }
+        }
+
+        l.lock();
+        last_applied_[server_num] = m.command_index_;
+        l.unlock();
+
+        if (m.command_index_ % SNAPSHOT_INTERVAL == 0) {
+          nlohmann::json json_snap;
+          json_snap["last_included_index"] = m.command_index_;
+          std::vector<CommandType> xlog;
+          for (int j = 0; j <= m.command_index_; j++) {
+            if (logs_[server_num].contains(j)) {
+              xlog.push_back(std::any_cast<CommandType>(logs_[server_num][j]));
+            } else {
+              // little hack for the very first index
+              xlog.push_back({});
+            }
+          }
+          json_snap["xlog"] = xlog;
+          Snapshot snap{json_snap.dump()};
+          rf->DoSnapshot(m.command_index_, snap);
+        }
+      } else {
+        // Ignore other types of ApplyMsg.
+      }
+      if (err_msg != "") {
+        Logger::Debug(kDTest, -1, fmt::format("apply error: {}", err_msg));
+        apply_err_[server_num] = err_msg;
+        // keep reading after error so that Raft doesn't block holding locks...
+      }
     }
   }
 

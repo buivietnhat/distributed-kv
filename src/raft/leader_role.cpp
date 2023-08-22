@@ -6,8 +6,6 @@
 
 namespace kv::raft {
 
-using common::Logger;
-
 bool Raft::CheckOutdateAndTransitionToFollower(int current_term, int new_term) {
   if (new_term > current_term) {
     std::unique_lock l(mu_);
@@ -34,7 +32,6 @@ void Raft::SendHeartBeat(int server, int term) {
   if (reply && !reply->success_) {
     CheckOutdateAndTransitionToFollower(term, reply->term_);
   }
-
 }
 
 void Raft::BroadcastHeartBeats() {
@@ -49,7 +46,6 @@ void Raft::BroadcastHeartBeats() {
     for (uint32_t server = 0; server < peers_.size(); server++) {
       if (server != me_) {
         std::thread([&, server = server, term = term] { SendHeartBeat(server, term); }).detach();
-        //        pool_.AddTask([&, server = server, term = term] { SendHeartBeat(server, term); });
       }
     }
 
@@ -64,8 +60,6 @@ void Raft::LeaderWorkLoop() {
     if (role_ != LEADER) {
       return;
     }
-
-    //    Logger::Debug(kDInfo, me_, fmt::format("Pool tasks size = {}", pool_.UnsafeSize()));
 
     auto [replica_list, start_idx] = NeedToRequestAppend();
     if (!replica_list.empty()) {
@@ -221,8 +215,7 @@ AppendEntriesResult Raft::RequestAppendEntry(int server, int prev_log_idx, int p
         Logger::Debug(
             kDTrace, me_,
             fmt::format("I no longer have the info for prev indexes for server {}, send snapshot instead", server));
-        // TODO(nhat): implement this
-        //            rf.sendLatesSnapshot(server)
+        SendLatestSnapshot(server);
       }
     }
   } else {
@@ -264,7 +257,7 @@ std::pair<std::vector<int>, int> Raft::AnalyseToCommit(const std::unordered_map<
                             common::ToString(sorted_pair_match), commit_index));
 
   auto leader_commit = tentative_cmit_index_[me_];
-  if (leader_commit < lm_->GetComminIndex()) {
+  if (leader_commit < lm_->GetCommitIndex()) {
     throw RAFT_EXCEPTION(fmt::format("tentative commit idx %d is smaller than the actual commit idx %d", leader_commit,
                                      lm_->GetStartIndex()));
   }
@@ -338,8 +331,7 @@ void Raft::RequestAppendEntries(const std::vector<int> &replica_list, int start_
 
       if (prev_log_idx < lm_->GetLastIncludedIndex()) {
         Logger::Debug(kDTrace, me_, fmt::format("Replica {} is too lagged behind, send Snapshot instead", server));
-        // TODO(nhat) implement this
-        //        SendLatestSnapshot(server)
+        SendLatestSnapshot(server);
         log_finish_func();
         return;
       }
@@ -454,12 +446,11 @@ void Raft::RequestCommits(const std::vector<int> &server_list, int index, int st
     Persist();
     if (curr_commit_idx < start_idx) {
       Logger::Debug(kDSnap, me_,
-                    fmt::format("My StartIdx {} > CommitIdx {}, send ApplySnap first", start_idx, curr_commit_idx));
-      // TODO(nhat): implement this
-      //      rf.lm.applyLatestSnap()
-      //
-      //      // update new FromCommitIdx and retry
-      //      currCommitIdx = rf.lm.CommitIndex()
+                    fmt::format("My StartIdx {} > CommitIdx {}, ApplySnap first", start_idx, curr_commit_idx));
+      lm_->ApplyLatestSnap();
+
+      // update new FromCommitIdx and retry
+      curr_commit_idx = lm_->GetCommitIndex();
     }
 
     lm_->CommitEntries(start_idx, curr_commit_idx + 1, index);
@@ -488,6 +479,117 @@ std::tuple<int, int, bool> Raft::Start(std::any command) {
   }
 
   return {-1, -1, false};
+}
+
+void Raft::SendSnapshot(int server, int last_included_index, int last_included_term, int leader_term,
+                        std::shared_ptr<Snapshot> snapshot) {
+  Logger::Debug(kDSnap, me_,
+                fmt::format("Send snapshot upto index {} and term {} to Server {}", last_included_index,
+                            last_included_term, server));
+
+  InstallSnapshotArgs args;
+  args.leader_term_ = leader_term;
+  args.leader_id_ = me_;
+  args.last_included_index_ = last_included_index;
+  args.last_included_term_ = last_included_term;
+  args.data_ = *snapshot;
+  args.done_ = true;
+
+  auto reply = RequestInstallSnapshot(server, args);
+  if (reply) {
+    std::unique_lock l(mu_);
+    if (term_ != leader_term || Killed()) {
+      Logger::Debug(
+          kDSnap, me_,
+          fmt::format("My internal state has changed or been killed, oldTerm {} newTerm {}", leader_term, term_));
+      return;
+    }
+
+    if (term_ < reply->term_) {
+      Logger::Debug(kDSnap, me_,
+                    fmt::format("Transition to follower since Server{}'s term {} is greater than mine {}", server,
+                                reply->term_, term_));
+      TransitionToFollower(reply->term_);
+      l.unlock();
+
+      // persist the changes since the term has changed
+      Persist();
+      return;
+    }
+
+    Logger::Debug(kDSnap, me_,
+                  fmt::format("Send snapshot to server {} upto index {} successfully", server, last_included_index));
+    // save the next index info
+    next_index_[server] = std::max(last_included_index + 1, next_index_[server]);
+    tentative_next_index_[server] = last_included_index + 1;
+    Logger::Debug(kDSnap, me_, fmt::format("Set next idx for server {} to {}", server, next_index_[server]));
+    Logger::Debug(kDInfo, me_,
+                  fmt::format("Set tentative next idx for server {} to {}", server, tentative_next_index_[server]));
+    l.unlock();
+  } else {
+    if (!Killed()) {
+      Logger::Debug(kDSnap, me_,
+                    fmt::format("Couldn't send Snapshot to server {} with last Included index {} due to network error",
+                                server, last_included_index));
+      std::unique_lock l(mu_);
+      tentative_next_index_[server] = next_index_[server];
+      Logger::Debug(
+          kDInfo, me_,
+          fmt::format("Set tentative next idx and for server {} to {}", server, tentative_next_index_[server]));
+    }
+  }
+}
+
+void Raft::SendSnapshots(const std::vector<int> &replica_list, int last_included_index, const Snapshot &snapshot) {
+  auto last_included_term = lm_->GetTerm(last_included_index);
+  std::unique_lock l(mu_);
+  auto leader_term = term_;
+  for (auto s : replica_list) {
+    tentative_next_index_[s] = std::max(tentative_next_index_[s], last_included_index + 1);
+  }
+  l.unlock();
+
+  auto snap = std::make_shared<Snapshot>(snapshot);
+
+  for (auto s : replica_list) {
+    thread_registry_.RegisterNewThread([&, s, last_included_index, last_included_term, leader_term, snap] {
+      SendSnapshot(s, last_included_index, last_included_term, leader_term, snap);
+    });
+  }
+}
+
+void Raft::CheckAndSendInstallSnapshot(int last_included_index, const Snapshot &snapshot) {
+  std::vector<int> replica_list;
+  std::unique_lock l(mu_);
+  for (const auto &[s, next_idx] : next_index_) {
+    if (next_idx < last_included_index + 1) {
+      replica_list.push_back(s);
+    }
+  }
+
+  if (!replica_list.empty()) {
+    Logger::Debug(kDSnap, me_,
+                  fmt::format("About to send snapshot upto index {} to list {} nextIdxList {}", last_included_index,
+                              common::ToString(replica_list), common::ToString(next_index_)));
+  }
+
+  l.unlock();
+
+  SendSnapshots(replica_list, last_included_index, snapshot);
+}
+
+void Raft::SendLatestSnapshot(int server) {
+  lm_->Lock();
+  auto last_included_index = lm_->DoGetLastIncludedIndex();
+  auto last_included_term = lm_->DoGetLastIncludedTerm();
+  auto snapshot = std::make_shared<Snapshot>(lm_->DoGetSnapshot());
+  lm_->Unlock();
+
+  std::unique_lock l(mu_);
+  auto current_term = term_;
+  l.unlock();
+
+  SendSnapshot(server, last_included_index, last_included_term, current_term, snapshot);
 }
 
 std::optional<AppendEntryReply> Raft::DoRequestAppendEntry(int server, const AppendEntryArgs &args) const {

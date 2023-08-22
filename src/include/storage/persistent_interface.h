@@ -1,11 +1,7 @@
 #pragma once
 
 #include <optional>
-
-namespace kv::raft {
-struct RaftPersistState;
-struct Snapshot;
-}  // namespace kv::raft
+#include "raft/common.h"
 
 namespace kv::storage {
 
@@ -18,6 +14,8 @@ class PersistentInterface {
   virtual std::optional<raft::Snapshot> ReadRaftSnapshot() const = 0;
 
   virtual void Save(const raft::RaftPersistState &state, const raft::Snapshot &snapshot) = 0;
+
+  virtual int RaftStateSize() const = 0;
 
   virtual ~PersistentInterface() = default;
 };

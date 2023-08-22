@@ -9,38 +9,17 @@
 #include "common/exception.h"
 #include "common/logger.h"
 #include "fmt/format.h"
+#include "raft/common.h"
 
 namespace kv::raft {
-
-struct LogEntry {
-  int term_;
-  std::any command_;
-};
-
-struct AppendEntriesResult {
-  int last_log_idx_;  // index that the server is replicated upto
-  int server_;
-};
-
-struct ApplyMsg {
-  bool command_valid_{false};
-  std::any command_;
-  int command_index_{0};
-
-  bool snapshot_valid_{false};
-  std::vector<std::byte> snapshot_;
-  int snapshot_term_{0};
-  int snapshot_index_{0};
-};
-
-struct AppendEntryReply;
-struct AppendEntryArgs;
 
 class LogManager {
  public:
   LogManager(int me, std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>> apply_channel);
 
   void CommitEntries(int start_idx, int from_idx, int to_idx);
+
+  void ApplySnap(int snapshot_idx, int snapshot_term, const Snapshot &snap);
 
   std::vector<LogEntry> GetEntries(int start_idx) const;
 
@@ -52,6 +31,22 @@ class LogManager {
   bool AppendEntries(const AppendEntryArgs &args, AppendEntryReply *reply, std::function<void(void)> persister);
 
   void AddNewEntries(int index, const std::vector<LogEntry> &entries);
+
+  void DoDiscardLogs(int to_idx, int last_included_term);
+
+  void ApplyLatestSnap();
+
+  inline void DiscardLogs(int to_idx, int last_included_term) {
+    std::lock_guard l(mu_);
+    DoDiscardLogs(to_idx, last_included_term);
+  }
+
+  inline Snapshot DoGetSnapshot() {
+    if (snapshot_ == nullptr) {
+      throw LOG_MANAGER_EXCEPTION("trying to get nullptr snapshot");
+    }
+    return *snapshot_;
+  }
 
   inline void Lock() const { mu_.lock(); }
 
@@ -76,6 +71,8 @@ class LogManager {
     std::unique_lock l(mu_);
     DoSetCommitIndex(index);
   }
+
+  void DoSetSnapshot(const Snapshot &snap);
 
   inline int DoGetCommitIndex() const { return commid_idx_; }
 
@@ -118,7 +115,7 @@ class LogManager {
     DoSetLastIncludedTerm(term);
   }
 
-  inline int GetComminIndex() const {
+  inline int GetCommitIndex() const {
     std::unique_lock l(mu_);
     return commid_idx_;
   }
@@ -148,7 +145,10 @@ class LogManager {
     return log_[actual_index].term_;
   }
 
-  inline int GetTerm(int index) const { return DoGetTerm(index); }
+  inline int GetTerm(int index) const {
+    std::lock_guard l(mu_);
+    return DoGetTerm(index);
+  }
 
   inline int DoGetLastLogIdx() const { return static_cast<int>(log_.size() - 1 + start_idx_); }
 
@@ -230,7 +230,7 @@ class LogManager {
   int last_included_term_{0};
   std::vector<LogEntry> log_;
 
-  [[maybe_unused]] std::vector<std::byte> snapshot_;
+  std::unique_ptr<Snapshot> snapshot_;
   [[maybe_unused]] int last_applied_{0};
 };
 

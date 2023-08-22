@@ -1,9 +1,7 @@
 #pragma once
 
 #include <optional>
-
-#include "raft/raft.h"
-#include "raft/voter.h"
+#include "raft/common.h"
 
 namespace kv::network {
 
@@ -12,6 +10,8 @@ class ClientEnd {
   virtual std::optional<raft::RequestVoteReply> RequestVote(const raft::RequestVoteArgs &args) const = 0;
 
   virtual std::optional<raft::AppendEntryReply> AppendEntries(const raft::AppendEntryArgs &args) const = 0;
+
+  virtual std::optional<raft::InstallSnapshotReply> InstallSnapshot(const raft::InstallSnapshotArgs &args) const = 0;
 
   virtual std::optional<int> Test(int input) const = 0;
 

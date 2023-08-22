@@ -18,16 +18,15 @@
 #include "fmt/format.h"
 #include "network/rpc_interface.h"
 #include "raft/raft.h"
-#include "raft/voter.h"
 
 using namespace std::chrono_literals;
 
 namespace kv::network {
 
-using RequestArgs = std::variant<int, raft::RequestVoteArgs, raft::AppendEntryArgs>;
-using ReplyArgs = std::variant<int, raft::RequestVoteReply, raft::AppendEntryReply>;
+using RequestArgs = std::variant<int, raft::RequestVoteArgs, raft::AppendEntryArgs, raft::InstallSnapshotArgs>;
+using ReplyArgs = std::variant<int, raft::RequestVoteReply, raft::AppendEntryReply, raft::InstallSnapshotReply>;
 
-enum class Method : uint8_t { RESERVERD, TEST, REQUEST_VOTE, APPEND_ENTRIES };
+enum class Method : uint8_t { RESERVERD, TEST, REQUEST_VOTE, APPEND_ENTRIES, INSTALL_SNAPSHOT };
 
 struct ReplyMessage {
   bool ok_{false};
@@ -75,6 +74,13 @@ struct Server {
           throw std::runtime_error("unknown raft service, expecting one");
         }
         auto rep = raft_->AppendEntries(std::get<raft::AppendEntryArgs>(req.args_));
+        return {true, std::move(rep)};
+      }
+      case INSTALL_SNAPSHOT: {
+        if (raft_ == nullptr) {
+          throw std::runtime_error("unknown raft service, expecting one");
+        }
+        auto rep = raft_->InstallSnapshot(std::get<raft::InstallSnapshotArgs>(req.args_));
         return {true, std::move(rep)};
       }
       case TEST: {
@@ -125,6 +131,23 @@ class MockingClientEnd : public ClientEnd {
     auto reply = req_msg.chan_->Receive();
     if (reply.ok_) {
       return std::get<raft::AppendEntryReply>(reply.args_);
+    }
+
+    return {};
+  }
+
+  std::optional<raft::InstallSnapshotReply> InstallSnapshot(const raft::InstallSnapshotArgs &args) const override {
+    if (finished_) {
+      return {};
+    }
+
+    common::Channel<ReplyMessage> chan;
+    RequestMessage req_msg{endname_, INSTALL_SNAPSHOT, args, &chan};
+    chan_.Send(req_msg);
+
+    auto reply = req_msg.chan_->Receive();
+    if (reply.ok_) {
+      return std::get<raft::InstallSnapshotReply>(reply.args_);
     }
 
     return {};

@@ -11,8 +11,6 @@
 
 namespace kv::raft {
 
-using common::Logger;
-
 Voter::Voter(std::vector<network::ClientEnd *> peers, int me) : peers_(std::move(peers)), me_(me) {
   // to attempt to election right away
   last_heard_from_leader_ = common::AddTimeMs(common::Now(), MS(-500));

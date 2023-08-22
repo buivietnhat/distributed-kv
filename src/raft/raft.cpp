@@ -4,12 +4,8 @@
 
 #include "common/logger.h"
 #include "fmt/format.h"
-#include "network/rpc_interface.h"
-#include "storage/persistent_interface.h"
 
 namespace kv::raft {
-
-using common::Logger;
 
 Raft::Raft(std::vector<network::ClientEnd *> peers, uint32_t me, storage::PersistentInterface *persister,
            std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>> apply_channel)
@@ -168,7 +164,7 @@ void Raft::TransitionToLeader() {
   role_ = LEADER;
   auto term = term_;
   InitMetaDataForLeader();
-  tentative_cmit_index_[me_] = lm_->GetComminIndex();
+  tentative_cmit_index_[me_] = lm_->GetCommitIndex();
   l.unlock();
 
   Logger::Debug(kDTerm, me_, fmt::format("I am a leader now with term {}", term));
@@ -259,6 +255,15 @@ void Raft::ReadPersistState(const RaftPersistState &state) {
                             "lastIncludedIdx {}, lastIncludedTerm {} from persisten state",
                             state.term_, state.voted_for_, state.log_start_idx_, lm_->DoGetLastLogIdx(),
                             lm_->GetLastLogTerm(), state.last_included_idx_, state.last_included_term_));
+}
+
+void Raft::ReadPersistSnap(const Snapshot &snap) {
+  if (snap.Empty()) {
+    Logger::Debug(kDWarn, me_, "There is no snapshot persisted");
+    return;
+  }
+
+  lm_->DoSetSnapshot(snap);
 }
 
 }  // namespace kv::raft
