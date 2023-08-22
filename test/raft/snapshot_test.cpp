@@ -82,28 +82,28 @@ static void SnapCommon(const std::string &name, bool disconnect, bool reliable, 
   cfg.Cleanup();
 }
 
-TEST(RaftSnapshotTest, DISABLED_SnapshotBasic) { SnapCommon("Test: snapshots basic", false, true, false); }
+TEST(RaftSnapshotTest, SnapshotBasic) { SnapCommon("Test: snapshots basic", false, true, false); }
 
-TEST(RaftSnapshotTest, DISABLED_InstallSnapshots) {
+TEST(RaftSnapshotTest, InstallSnapshots) {
   SnapCommon("Test: install snapshots (disconnect)", true, true, false);
 }
 
-TEST(RaftSnapshotTest, DISABLED_InstallSnapshotsUnreliable) {
+TEST(RaftSnapshotTest, InstallSnapshotsUnreliable) {
   SnapCommon("Test: install snapshots (disconnect+unreliable)", true, false, false);
 }
 
-TEST(RaftSnapshotTest, DISABLED_InstallSnapshotsCrash) {
+TEST(RaftSnapshotTest, InstallSnapshotsCrash) {
   SnapCommon("Test: install snapshots (crash)", false, true, true);
 }
 
-TEST(RaftSnapshotTest, DISABLED_InstallSnapshotsUnCrash) {
+TEST(RaftSnapshotTest, InstallSnapshotsUnCrash) {
   SnapCommon("Test: install snapshots (unreliable+crash)", false, false, true);
 }
 
 // do the servers persist the snapshots, and
 // restart using snapshot along with the
 // tail of the log?
-TEST(RaftSnapshotTest, DISABLED_SnapshotAllCrash) {
+TEST(RaftSnapshotTest, SnapshotAllCrash) {
   auto servers = 3;
   auto iters = 5;
   Configuration<int> cfg{servers, false, true};

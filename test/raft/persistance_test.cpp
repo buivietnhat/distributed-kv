@@ -60,7 +60,7 @@ TEST(RaftPersistTest, BasicPersist) {
   EXPECT_TRUE(cfg.Cleanup());
 }
 
-TEST(RaftPersistTest, DISABLED_MorePersistence) {
+TEST(RaftPersistTest, MorePersistence) {
   int servers = 5;
   Configuration<int> cfg{servers, false, false};
 
@@ -114,7 +114,7 @@ TEST(RaftPersistTest, DISABLED_MorePersistence) {
   EXPECT_TRUE(cfg.Cleanup());
 }
 
-TEST(RaftPersistTest, DISABLED_PartitionedLeader) {
+TEST(RaftPersistTest, PartitionedLeader) {
   int servers = 3;
   Configuration<int> cfg{servers, false, false};
 
@@ -151,7 +151,7 @@ TEST(RaftPersistTest, DISABLED_PartitionedLeader) {
 }
 
 // Test the scenarios described in Figure 8 of the extened Raft paper
-TEST(RaftPersistTest, DISABLED_Figure8) {
+TEST(RaftPersistTest, Figure8) {
   int servers = 5;
   Configuration<int> cfg{servers, false, false};
 
@@ -209,7 +209,7 @@ TEST(RaftPersistTest, DISABLED_Figure8) {
   EXPECT_TRUE(cfg.Cleanup());
 }
 
-TEST(RaftPersistTest, DISABLED_UnreliableAgree) {
+TEST(RaftPersistTest, UnreliableAgree) {
   int servers = 5;
   Configuration<int> cfg{servers, true, false};
 
