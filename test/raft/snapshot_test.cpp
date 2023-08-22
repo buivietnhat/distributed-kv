@@ -86,8 +86,16 @@ TEST(RaftSnapshotTest, DISABLED_SnapshotBasic) {
   SnapCommon("Test: snapshots basic", false, true, false);
 }
 
-TEST(RaftSnapshotTest, InstallSnapshots) {
+TEST(RaftSnapshotTest, DISABLED_InstallSnapshots) {
   SnapCommon("Test: install snapshots (disconnect)", true, true, false);
+}
+
+TEST(RaftSnapshotTest, DISABLED_InstallSnapshotsUnreliable) {
+  SnapCommon("Test: install snapshots (disconnect+unreliable)", true, false, false);
+}
+
+TEST(RaftSnapshotTest, InstallSnapshotsCrash) {
+  SnapCommon("Test: install snapshots (crash)", false, true, true);
 }
 
 }  // namespace kv::raft

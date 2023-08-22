@@ -22,6 +22,11 @@ Raft::Raft(std::vector<network::ClientEnd *> peers, uint32_t me, storage::Persis
     ReadPersistState(*state);
   }
 
+  auto snap = persister_->ReadRaftSnapshot();
+  if (snap) {
+    ReadPersistSnap(*snap);
+  }
+
   tickert_ = std::thread([&] { Ticker(); });
 }
 

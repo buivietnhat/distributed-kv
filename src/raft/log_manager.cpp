@@ -226,14 +226,13 @@ bool LogManager::AppendEntries(const AppendEntryArgs &args, AppendEntryReply *re
     persister();
 
     // maybe I am just restart and lost the cmmit infomation
-    if (start_idx > from_commit_idx) {
-      // TODO(nhat): implement this
-      //    logger.Debug(mylogger.DSnap, lm.me, "My StartIdx %d > CommitIdx %d, send ApplySnap first", startIdx,
-      //    fromCommitIdx-1)
-      //        lm.applyLatestSnap()
-      //
-      //        // update new FromCommitIdx and retry
-      //        fromCommitIdx = lm.CommitIndex() + 1
+    if (start_idx > from_commit_idx + 1) {
+      Logger::Debug(kDSnap, me_,
+                    fmt::format("My StartIdx {} > CommitIdx {}, ApplySnap first", start_idx, from_commit_idx));
+      ApplyLatestSnap();
+
+      // update new FromCommitIdx and retry
+      from_commit_idx = GetCommitIndex() + 1;
     }
 
     CommitEntries(start_idx, from_commit_idx, to_commit_idx);
