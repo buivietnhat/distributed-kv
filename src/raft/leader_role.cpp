@@ -1,7 +1,7 @@
 #include <algorithm>
 
 #include "common/logger.h"
-#include "network/rpc_interface.h"
+#include "network/client_end.h"
 #include "raft/raft.h"
 
 namespace kv::raft {
@@ -64,7 +64,6 @@ void Raft::LeaderWorkLoop() {
     auto [replica_list, start_idx] = NeedToRequestAppend();
     if (!replica_list.empty()) {
       l.unlock();
-
       Logger::Debug(
           kDLeader, me_,
           fmt::format(
@@ -127,7 +126,7 @@ int Raft::ComputePreviousIndexes(int old_pre_index, const AppendEntryReply &repl
 }
 
 AppendEntriesResult Raft::RequestAppendEntry(int server, int prev_log_idx, int prev_log_term, bool commit,
-                                             int commit_idx) {
+                                             int commit_idx, std::vector<LogEntry> entries) {
   AppendEntriesResult result;
   result.server_ = server;
 
@@ -138,7 +137,9 @@ AppendEntriesResult Raft::RequestAppendEntry(int server, int prev_log_idx, int p
   args.leader_id_ = me_;
   args.prev_log_idx_ = prev_log_idx;
   args.prev_log_term_ = prev_log_term;
-  args.entries_ = lm_->GetEntries(prev_log_idx + 1);
+  if (!commit) {
+    args.entries_ = std::move(entries);
+  }
 
   auto start_idx = lm_->GetStartIndex();
 
@@ -195,7 +196,7 @@ AppendEntriesResult Raft::RequestAppendEntry(int server, int prev_log_idx, int p
     }
 
     if (lm_->GetStartIndex() != start_idx) {
-      Logger::Debug(kDTrace, me_, "Gave up the AE request since I just installed the Snapshot");
+      Logger::Debug(kDSnap, me_, "Gave up the AE request since I just installed the Snapshot");
       result.last_log_idx_ = -1;
       return result;
     }
@@ -205,15 +206,16 @@ AppendEntriesResult Raft::RequestAppendEntry(int server, int prev_log_idx, int p
       auto new_prev_log_idx = ComputePreviousIndexes(prev_log_idx, *reply);
       if (new_prev_log_idx >= lm_->GetLastIncludedIndex()) {
         auto new_prev_log_term = lm_->GetTerm(new_prev_log_idx);
+        entries = lm_->GetEntries(new_prev_log_idx + 1);
         Logger::Debug(
             kDLeader, me_,
             fmt::format("There's a conlicting entry for Server {} at idx {} and term {}, retry with new "
                         "prevLogIdx = {}, prevLogTerm = {}",
                         server, args.prev_log_idx_, args.prev_log_term_, new_prev_log_idx, new_prev_log_term));
-        RequestAppendEntry(server, new_prev_log_idx, new_prev_log_term, false, 0);
+        RequestAppendEntry(server, new_prev_log_idx, new_prev_log_term, false, 0, std::move(entries));
       } else {
         Logger::Debug(
-            kDTrace, me_,
+            kDSnap, me_,
             fmt::format("I no longer have the info for prev indexes for server {}, send snapshot instead", server));
         SendLatestSnapshot(server);
       }
@@ -221,12 +223,12 @@ AppendEntriesResult Raft::RequestAppendEntry(int server, int prev_log_idx, int p
   } else {
     if (!Killed()) {
       Logger::Debug(
-          kDWarn, me_,
+          kDInfo, me_,
           fmt::format("Request to AE for Server {} for index {} term {} commit = {} has failed due to network error",
                       server, prev_log_idx + 1, prev_log_term, commit));
 
       if (lm_->GetStartIndex() != start_idx && commit) {
-        Logger::Debug(kDWarn, me_,
+        Logger::Debug(kDSnap, me_,
                       fmt::format("Not retry to commit for server {} with index {} since I just installed snapshot",
                                   server, prev_log_idx + 1));
         result.last_log_idx_ = -1;
@@ -300,7 +302,7 @@ void Raft::RequestAppendEntries(const std::vector<int> &replica_list, int start_
   l.unlock();
 
   if (start_idx != lm_->GetStartIndex()) {
-    Logger::Debug(kDDrop, me_, "Give up sending logs to ALL replicas since just installed snapshot");
+    Logger::Debug(kDLeader, me_, "Give up sending logs to ALL replicas since just installed snapshot");
     return;
   }
 
@@ -338,23 +340,23 @@ void Raft::RequestAppendEntries(const std::vector<int> &replica_list, int start_
 
       lm_->Lock();
       if (lm_->DoGetStartIndex() != start_idx) {
-        std::cout << "Current Log Start Idx " << lm_->DoGetStartIndex() << std::endl;
-        std::cout << "start_idx " << start_idx << std::endl;
         lm_->Unlock();
 
         l.lock();
-        tentative_next_index_[server] = last_log_idx + 1;
-        Logger::Debug(kDTrace, me_,
+        tentative_next_index_[server] = next_index_[server] + 1;
+        Logger::Debug(kDLeader, me_,
                       fmt::format("Give up sending Logs to server {} since the snapshot just been installed", server));
         l.unlock();
 
         log_finish_func();
         return;
       }
+
       auto prev_log_term = lm_->DoGetTerm(prev_log_idx);
+      auto entries = lm_->DoGetEntries(prev_log_idx + 1);
       lm_->Unlock();
 
-      auto r = RequestAppendEntry(server, prev_log_idx, prev_log_term, false, 0);
+      auto r = RequestAppendEntry(server, prev_log_idx, prev_log_term, false, 0, std::move(entries));
       if (!IsLeader() || Killed()) {
         Logger::Debug(kDLeader, me_, "My internal state has changed, I gave up requesting appending logs to replicas");
         log_finish_func();

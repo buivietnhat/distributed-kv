@@ -1,11 +1,11 @@
 #include "gtest/gtest.h"
-#include "raft/configuration.h"
+#include "raft/config.h"
 
 namespace kv::raft {
 
 TEST(RaftLogTest, BasicAgreement) {
   int servers = 3;
-  Configuration<int> cfg{servers, false, false};
+  Config<int> cfg{servers, false, false};
 
   cfg.Begin("Test: basic agreement");
 
@@ -29,7 +29,7 @@ TEST(RaftLogTest, BasicAgreement) {
 
 TEST(RaftLogTest, FollowerFailure) {
   int servers = 3;
-  Configuration<int> cfg{servers, false, false};
+  Config<int> cfg{servers, false, false};
 
   cfg.Begin("Test: test progressive failure of followers");
 
@@ -74,7 +74,7 @@ TEST(RaftLogTest, FollowerFailure) {
 
 TEST(RaftLogTest, LeaderFailure) {
   int servers = 3;
-  Configuration<int> cfg{servers, false, false};
+  Config<int> cfg{servers, false, false};
 
   cfg.Begin("Test: test failure of leaders");
 
@@ -114,7 +114,7 @@ TEST(RaftLogTest, LeaderFailure) {
 // test that a follower participates after disconnnect and re-connect
 TEST(RaftLogTest, FailAgree) {
   int servers = 3;
-  Configuration<int> cfg{servers, false, false};
+  Config<int> cfg{servers, false, false};
 
   cfg.Begin("Test: agreement after follower reconnects");
 
@@ -148,7 +148,7 @@ TEST(RaftLogTest, FailAgree) {
 
 TEST(RaftLogTest, NoAgree) {
   int servers = 5;
-  Configuration<int> cfg{servers, false, false};
+  Config<int> cfg{servers, false, false};
 
   cfg.Begin("Test: no agreement if too many followers disconnect");
 
@@ -205,7 +205,7 @@ TEST(RaftLogTest, NoAgree) {
 
 TEST(RaftLogTest, ReJoin) {
   int servers = 3;
-  Configuration<int> cfg{servers, false, false};
+  Config<int> cfg{servers, false, false};
 
   cfg.Begin("Test: rejoin of partitioned leader");
 
@@ -246,7 +246,7 @@ TEST(RaftLogTest, ReJoin) {
 
 TEST(RaftLogTest, Backup) {
   int servers = 5;
-  Configuration<int> cfg{servers, false, false};
+  Config<int> cfg{servers, false, false};
 
   cfg.Begin("Test: leader backs up quickly over incorrect follower logs");
 

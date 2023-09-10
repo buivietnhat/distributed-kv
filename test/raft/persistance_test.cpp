@@ -1,11 +1,11 @@
 #include "gtest/gtest.h"
-#include "raft/configuration.h"
+#include "raft/config.h"
 
 namespace kv::raft {
 
 TEST(RaftPersistTest, BasicPersist) {
   int servers = 3;
-  Configuration<int> cfg{servers, false, false};
+  Config<int> cfg{servers, false, false};
 
   cfg.Begin("Test: basic persistence");
 
@@ -62,7 +62,7 @@ TEST(RaftPersistTest, BasicPersist) {
 
 TEST(RaftPersistTest, MorePersistence) {
   int servers = 5;
-  Configuration<int> cfg{servers, false, false};
+  Config<int> cfg{servers, false, false};
 
   cfg.Begin("Test: more persistence");
 
@@ -116,7 +116,7 @@ TEST(RaftPersistTest, MorePersistence) {
 
 TEST(RaftPersistTest, PartitionedLeader) {
   int servers = 3;
-  Configuration<int> cfg{servers, false, false};
+  Config<int> cfg{servers, false, false};
 
   cfg.Begin("Test: partitioned leader and one follower crash, leader restarts");
 
@@ -153,7 +153,7 @@ TEST(RaftPersistTest, PartitionedLeader) {
 // Test the scenarios described in Figure 8 of the extened Raft paper
 TEST(RaftPersistTest, Figure8) {
   int servers = 5;
-  Configuration<int> cfg{servers, false, false};
+  Config<int> cfg{servers, false, false};
 
   cfg.Begin("Test: Figure 8");
 
@@ -211,7 +211,7 @@ TEST(RaftPersistTest, Figure8) {
 
 TEST(RaftPersistTest, UnreliableAgree) {
   int servers = 5;
-  Configuration<int> cfg{servers, true, false};
+  Config<int> cfg{servers, true, false};
 
   cfg.Begin("Test: unreliable agreement");
 
@@ -231,7 +231,6 @@ TEST(RaftPersistTest, UnreliableAgree) {
   cfg.SetUnreliable(false);
 
   while (count > 0) {
-
     Logger::Debug(kDTest, -1, fmt::format("Waiting for counter to reach 0, now {}", count.load()));
     common::SleepMs(100);
   }

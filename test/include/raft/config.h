@@ -26,11 +26,11 @@ static constexpr int MAXLOGSIZE = 2000;
 using common::Logger;
 
 template <typename CommandType>
-class Configuration {
+class Config {
   using applier_t = std::function<void(int, std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>>)>;
 
  public:
-  Configuration(int num_servers, bool unreliable, bool snapshot) {
+  Config(int num_servers, bool unreliable, bool snapshot) {
     net_ = std::make_unique<network::Network>();
     num_servers_ = num_servers;
 
@@ -72,7 +72,7 @@ class Configuration {
     start_ = common::Now();
   }
 
-  ~Configuration() { Cleanup(); }
+  ~Config() { Cleanup(); }
 
   // how many servers think a log entry is commited?
   std::pair<int, std::any> NCommited(int index) {
@@ -278,8 +278,11 @@ class Configuration {
     // but copy old persister's content so that we always
     // pass Make() the last persisted state.
     if (saved_[server_num] != nullptr) {
-      auto state = saved_[server_num]->ReadRaftState();
-      auto snap = saved_[server_num]->ReadRaftSnapshot();
+//      auto state = saved_[server_num]->ReadRaftState();
+//      auto snap = saved_[server_num]->ReadRaftSnapshot();
+      std::optional<raft::RaftPersistState> state;
+      std::optional<raft::Snapshot> snap;
+      saved_[server_num]->ReadStateAndSnap(state, snap);
       saved_[server_num] = std::make_unique<storage::MockingPersister>(std::move(state), std::move(snap));
 
       if (snap && !snap->Empty()) {
@@ -600,7 +603,7 @@ class Configuration {
   std::vector<std::unique_ptr<storage::PersistentInterface>> saved_;
   std::vector<int> last_applied_;
   common::time_t t0_;     // time at which tester called Begin()
-  common::time_t start_;  // time at which the Configuration constructor was called
+  common::time_t start_;  // time at which the Config constructor was called
   int max_index_{0};
   std::vector<std::string> apply_err_;
   std::vector<std::shared_ptr<common::ConcurrentBlockingQueue<raft::ApplyMsg>>> apply_chs_;

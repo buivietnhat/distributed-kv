@@ -115,4 +115,15 @@ inline std::string ToString(const std::unordered_map<K, V> &map) {
   return ss.str();
 }
 
+template <typename K, typename V>
+inline std::string KeysToString(const std::unordered_map<K,V> &map) {
+  std::stringstream ss;
+  ss << "[ ";
+  for (const auto [k, _] : map) {
+    ss  << k << " ";
+  }
+  ss << "]";
+  return ss.str();
+}
+
 }  // namespace kv::common

@@ -6,7 +6,7 @@
 #include "common/logger.h"
 #include "common/util.h"
 #include "fmt/format.h"
-#include "network/rpc_interface.h"
+#include "network/client_end.h"
 #include "raft/raft.h"
 
 namespace kv::raft {
@@ -32,7 +32,7 @@ bool Voter::RequestVote(const InternalState &state, const RequestVoteArgs &args,
 
   std::unique_lock l(mu_);
   if (args.term_ == state.term_ && voted_for_ != -1) {
-    Logger::Debug(kDDrop, me_,
+    Logger::Debug(kDInfo, me_,
                   fmt::format("Drop request vote from S{} since I've already voted for another S{}", args.candidate_,
                               voted_for_));
     reply->vote_granted_ = false;
@@ -52,7 +52,7 @@ bool Voter::RequestVote(const InternalState &state, const RequestVoteArgs &args,
     return persist_changes;
   }
 
-  Logger::Debug(kDDrop, me_,
+  Logger::Debug(kDInfo, me_,
                 fmt::format("Drop Vote request since the candidate {} is not Up-To-Date as Mine: "
                             "lastLogTerm {}, lastLogidx {}, Candidate: lastLogTerm {}, lastLogIdx {}",
                             args.candidate_, state.last_log_term_, state.last_log_index_, args.last_log_term_,

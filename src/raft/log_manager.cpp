@@ -2,7 +2,7 @@
 
 namespace kv::raft {
 
-LogManager::LogManager(int me, std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>> apply_channel)
+LogManager::LogManager(int me, apply_ch_t apply_channel)
     : me_(me), apply_ch_(apply_channel) {
   log_.push_back({0, {}});
 }
@@ -10,6 +10,10 @@ LogManager::LogManager(int me, std::shared_ptr<common::ConcurrentBlockingQueue<A
 std::vector<LogEntry> LogManager::GetEntries(int start_idx) const {
   std::unique_lock l(mu_);
 
+  return DoGetEntries(start_idx);
+}
+
+std::vector<LogEntry> LogManager::DoGetEntries(int start_idx) const {
   start_idx = start_idx - start_idx_;
   if (start_idx < 0) {
     throw LOG_MANAGER_EXCEPTION(
@@ -79,7 +83,15 @@ void LogManager::AddNewEntries(int index, const std::vector<LogEntry> &entries) 
 void LogManager::ApplySnap(int snapshot_idx, int snapshot_term, const Snapshot &snap) {
   std::lock_guard apply_lock(apply_mu_);
 
-  Logger::Debug(kDCommit, me_, fmt::format("New Index idx {} applied Snap with Term {}", snapshot_idx, snapshot_term));
+  std::unique_lock l(mu_);
+  if (commid_idx_ >= snapshot_idx) {
+    Logger::Debug(
+        kDSnap, me_,
+        fmt::format("Drop the ApplySnap since the commit idx is already {} >= SnapIdx({})", commid_idx_, snapshot_idx));
+    return;
+  }
+  l.unlock();
+
   ApplyMsg apply_msg;
 
   apply_msg.snapshot_valid_ = true;
@@ -89,9 +101,11 @@ void LogManager::ApplySnap(int snapshot_idx, int snapshot_term, const Snapshot &
 
   apply_ch_->Enqueue(apply_msg);
 
-  std::unique_lock l(mu_);
+  l.lock();
   commid_idx_ = snapshot_idx;
   l.unlock();
+
+  Logger::Debug(kDCommit, me_, fmt::format("New Index idx {} applied Snap with Term {}", snapshot_idx, snapshot_term));
 }
 
 void LogManager::CommitEntries(int start_idx, int from_idx, int to_idx) {
@@ -104,7 +118,7 @@ void LogManager::CommitEntries(int start_idx, int from_idx, int to_idx) {
 
   std::lock_guard apply_lock(apply_mu_);
   std::unique_lock l(mu_);
-  if (commid_idx_ >= from_idx || start_idx != start_idx_) {
+  if (commid_idx_ >= from_idx || from_idx < start_idx_) {
     Logger::Debug(kDDrop, me_,
                   "Someone has tried to commited the newer index or just installed snapshot, I should return now");
     return;
@@ -199,7 +213,7 @@ bool LogManager::AppendEntries(const AppendEntryArgs &args, AppendEntryReply *re
   if (!IsEntryExist(args.prev_log_idx_, args.prev_log_term_)) {
     GenerateConflictingMsgReply(args.prev_log_idx_, reply);
     Logger::Debug(
-        kDDrop, me_,
+        kDInfo, me_,
         fmt::format("I don't have the entry with idx {} and term {}, return with XIndex = {}, Term = {}, XLen = {}",
                     args.prev_log_idx_, args.prev_log_term_, reply->xindex_, reply->term_, reply->xlen_));
     return false;
@@ -208,7 +222,7 @@ bool LogManager::AppendEntries(const AppendEntryArgs &args, AppendEntryReply *re
   if (args.commit_) {
     if (!IsCommitIdxValid(args.leader_commit_idx_)) {
       Logger::Debug(
-          kDDrop, me_,
+          kDInfo, me_,
           fmt::format("Drop the commit message since the LeaderCmdIdx {} is not valid (my current TentativeComIdx {})",
                       args.leader_commit_idx_, tentative_commit_idx_));
       return false;
@@ -237,10 +251,14 @@ bool LogManager::AppendEntries(const AppendEntryArgs &args, AppendEntryReply *re
 
     CommitEntries(start_idx, from_commit_idx, to_commit_idx);
     reply->success_ = true;
-    return true;
+    return false;
   }
 
   AddNewEntries(args.prev_log_idx_ + 1, args.entries_);
+  l.unlock();
+
+  persister();
+
   reply->success_ = true;
   return true;
 }
@@ -250,14 +268,14 @@ void LogManager::DoSetSnapshot(const Snapshot &snap) { snapshot_ = std::make_uni
 void LogManager::DoDiscardLogs(int to_idx, int last_included_term) {
   auto actual_to_idx = to_idx - start_idx_;
   if (actual_to_idx < 0) {
-    Logger::Debug(kDWarn, me_,
+    Logger::Debug(kDSnap, me_,
                   fmt::format("Already discarded up to index {} > demanding index {}", start_idx_, to_idx));
     return;
   }
 
   if (actual_to_idx + 1 >= static_cast<int>(log_.size())) {
     Logger::Debug(
-        kDWarn, me_,
+        kDSnap, me_,
         fmt::format("Discard toIdx {} greater the len of the Log {} startIdx {}", to_idx, log_.size(), start_idx_));
     start_idx_ = to_idx + 1;
     log_ = {};

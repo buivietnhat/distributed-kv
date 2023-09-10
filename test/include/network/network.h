@@ -16,17 +16,32 @@
 #include "common/macros.h"
 #include "common/util.h"
 #include "fmt/format.h"
-#include "network/rpc_interface.h"
+#include "network/client_end.h"
 #include "raft/raft.h"
+#include "shardctrler/server.h"
 
 using namespace std::chrono_literals;
 
 namespace kv::network {
 
-using RequestArgs = std::variant<int, raft::RequestVoteArgs, raft::AppendEntryArgs, raft::InstallSnapshotArgs>;
-using ReplyArgs = std::variant<int, raft::RequestVoteReply, raft::AppendEntryReply, raft::InstallSnapshotReply>;
+using RequestArgs =
+    std::variant<int, raft::RequestVoteArgs, raft::AppendEntryArgs, raft::InstallSnapshotArgs, shardctrler::JoinArgs,
+                 shardctrler::LeaveArgs, shardctrler::MoveArgs, shardctrler::QueryArgs>;
+using ReplyArgs =
+    std::variant<int, raft::RequestVoteReply, raft::AppendEntryReply, raft::InstallSnapshotReply,
+                 shardctrler::JoinReply, shardctrler::LeaveReply, shardctrler::MoveReply, shardctrler::QueryReply>;
 
-enum class Method : uint8_t { RESERVERD, TEST, REQUEST_VOTE, APPEND_ENTRIES, INSTALL_SNAPSHOT };
+enum class Method : uint8_t {
+  RESERVERD,
+  TEST,
+  REQUEST_VOTE,
+  APPEND_ENTRIES,
+  INSTALL_SNAPSHOT,
+  QUERY,
+  JOIN,
+  LEAVE,
+  MOVE
+};
 
 struct ReplyMessage {
   bool ok_{false};
@@ -50,11 +65,18 @@ struct Server {
 
   std::mutex mu_;
   raft::Raft *raft_;
+  shardctrler::ShardCtrler *shardctrler_;
+
   int count_{0};  // incoming RPCs
 
   void AddRaft(raft::Raft *raft) {
     std::lock_guard lock(mu_);
     raft_ = raft;
+  }
+
+  void AddShardCtrler(shardctrler::ShardCtrler *shardctrler) {
+    std::lock_guard lock(mu_);
+    shardctrler_ = shardctrler;
   }
 
   int GetCount() const { return count_; }
@@ -81,6 +103,34 @@ struct Server {
           throw std::runtime_error("unknown raft service, expecting one");
         }
         auto rep = raft_->InstallSnapshot(std::get<raft::InstallSnapshotArgs>(req.args_));
+        return {true, std::move(rep)};
+      }
+      case QUERY: {
+        if (shardctrler_ == nullptr) {
+          throw std::runtime_error("unknown shardctrler service, expecting one");
+        }
+        auto rep = shardctrler_->Query(std::get<shardctrler::QueryArgs>(req.args_));
+        return {true, std::move(rep)};
+      }
+      case JOIN: {
+        if (shardctrler_ == nullptr) {
+          throw std::runtime_error("unknown shardctrler service, expecting one");
+        }
+        auto rep = shardctrler_->Join(std::get<shardctrler::JoinArgs>(req.args_));
+        return {true, std::move(rep)};
+      }
+      case LEAVE: {
+        if (shardctrler_ == nullptr) {
+          throw std::runtime_error("unknown shardctrler service, expecting one");
+        }
+        auto rep = shardctrler_->Leave(std::get<shardctrler::LeaveArgs>(req.args_));
+        return {true, std::move(rep)};
+      }
+      case MOVE: {
+        if (shardctrler_ == nullptr) {
+          throw std::runtime_error("unknown shardctrler service, expecting one");
+        }
+        auto rep = shardctrler_->Move(std::get<shardctrler::MoveArgs>(req.args_));
         return {true, std::move(rep)};
       }
       case TEST: {
@@ -153,6 +203,75 @@ class MockingClientEnd : public ClientEnd {
     return {};
   }
 
+  std::optional<shardctrler::QueryReply> Query(const shardctrler::QueryArgs &args) const override {
+    if (finished_) {
+      return {};
+    }
+
+    common::Channel<ReplyMessage> chan;
+
+    RequestMessage req_msg{endname_, QUERY, args, &chan};
+    chan_.Send(req_msg);
+
+    auto reply = req_msg.chan_->Receive();
+    if (reply.ok_) {
+      return std::get<shardctrler::QueryReply>(reply.args_);
+    }
+
+    return {};
+  }
+
+  std::optional<shardctrler::JoinReply> Join(const shardctrler::JoinArgs &args) const override {
+    if (finished_) {
+      return {};
+    }
+
+    common::Channel<ReplyMessage> chan;
+    RequestMessage req_msg{endname_, JOIN, args, &chan};
+    chan_.Send(req_msg);
+
+    auto reply = req_msg.chan_->Receive();
+    if (reply.ok_) {
+      return std::get<shardctrler::JoinReply>(reply.args_);
+    }
+
+    return {};
+  }
+
+  std::optional<shardctrler::LeaveReply> Leave(const shardctrler::LeaveArgs &args) const override {
+    if (finished_) {
+      return {};
+    }
+
+    common::Channel<ReplyMessage> chan;
+    RequestMessage req_msg{endname_, LEAVE, args, &chan};
+    chan_.Send(req_msg);
+
+    auto reply = req_msg.chan_->Receive();
+    if (reply.ok_) {
+      return std::get<shardctrler::LeaveReply>(reply.args_);
+    }
+
+    return {};
+  }
+
+  std::optional<shardctrler::MoveReply> Move(const shardctrler::MoveArgs &args) const override {
+    if (finished_) {
+      return {};
+    }
+
+    common::Channel<ReplyMessage> chan;
+    RequestMessage req_msg{endname_, MOVE, args, &chan};
+    chan_.Send(req_msg);
+
+    auto reply = req_msg.chan_->Receive();
+    if (reply.ok_) {
+      return std::get<shardctrler::MoveReply>(reply.args_);
+    }
+
+    return {};
+  }
+
   std::optional<int> Test(int input) const override {
     // entire Network has been destroyed
     if (finished_) {
@@ -187,7 +306,7 @@ class Network {
 
   ~Network() { Cleanup(); }
 
-  void Connect(const std::string &endname, const std::string servername) {
+  void Connect(const std::string &endname, const std::string &servername) {
     std::lock_guard lock(mu_);
     connections_[endname] = servername;
   }
@@ -339,8 +458,8 @@ class Network {
     }
   }
 
-  std::shared_ptr<Server> ReadEndnameInfo(const std::string &endname, bool *enable, std::string *server_name, bool *reliable,
-                          bool *longreordering) {
+  std::shared_ptr<Server> ReadEndnameInfo(const std::string &endname, bool *enable, std::string *server_name,
+                                          bool *reliable, bool *longreordering) {
     std::shared_ptr<Server> server;
     std::lock_guard lock(mu_);
     *server_name = connections_[endname];

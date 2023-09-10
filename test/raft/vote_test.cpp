@@ -1,12 +1,12 @@
 
 #include "gtest/gtest.h"
-#include "raft/configuration.h"
+#include "raft/config.h"
 
 namespace kv::raft {
 
 TEST(RaftVoteTest, InitializeEletection) {
   int servers = 3;
-  Configuration<int> cfg{servers, false, false};
+  Config<int> cfg{servers, false, false};
 
   cfg.Begin("Test: initial election");
 
@@ -37,7 +37,7 @@ TEST(RaftVoteTest, InitializeEletection) {
 
 TEST(RaftVoteTest, ReElection) {
   int servers = 3;
-  Configuration<int> cfg{servers, false, false};
+  Config<int> cfg{servers, false, false};
 
   cfg.Begin("Test: election after network failure");
 
@@ -85,7 +85,7 @@ TEST(RaftVoteTest, ReElection) {
 
 TEST(RaftVoteTest, ManyElections) {
   int servers = 7;
-  Configuration<int> cfg{servers, false, false};
+  Config<int> cfg{servers, false, false};
 
   cfg.Begin("Test: multiple elections");
 

@@ -10,12 +10,13 @@ namespace kv {
 #define LOG_MANAGER_EXCEPTION(msg) LogManagerException(msg, __FILE__, __LINE__)
 #define VOTER_EXCEPTION(msg) VoterException(msg, __FILE__, __LINE__)
 #define RAFT_EXCEPTION(msg) RaftException(msg, __FILE__, __LINE__)
+#define SHARDCTRLER_EXCEPTION(msg) ShardCtrlerException(msg, __FILE__, __LINE__)
 #define CONFIG_EXCEPTION(msg) ConfigException(msg, __FILE__, __LINE__)
 
 /**
  * Exception types
  */
-enum class ExceptionType : uint8_t { RESERVED, NOT_IMPLEMENTED, LOG_MANAGER, VOTER, RAFT, CONFIG };
+enum class ExceptionType : uint8_t { RESERVED, NOT_IMPLEMENTED, LOG_MANAGER, VOTER, RAFT, SHARDCTRLER, CONFIG };
 
 /**
  * Exception base class.
@@ -100,6 +101,7 @@ DEFINE_EXCEPTION(NotImplementedException, ExceptionType::NOT_IMPLEMENTED);
 DEFINE_EXCEPTION(LogManagerException, ExceptionType::LOG_MANAGER);
 DEFINE_EXCEPTION(VoterException, ExceptionType::VOTER);
 DEFINE_EXCEPTION(RaftException, ExceptionType::RAFT);
+DEFINE_EXCEPTION(ShardCtrlerException, ExceptionType::SHARDCTRLER);
 DEFINE_EXCEPTION(ConfigException, ExceptionType::CONFIG);
 
 }  // namespace kv
