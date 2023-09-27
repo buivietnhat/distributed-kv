@@ -14,7 +14,8 @@ class PersistentInterface {
   virtual void SaveRaftSnapshot(const raft::Snapshot &snapshot) = 0;
   virtual std::optional<raft::Snapshot> ReadRaftSnapshot() const = 0;
 
-  virtual void ReadStateAndSnap(std::optional<raft::RaftPersistState> &state, std::optional<raft::Snapshot> snapshot) const = 0;
+  virtual void ReadStateAndSnap(std::optional<raft::RaftPersistState> &state,
+                                std::optional<raft::Snapshot> snapshot) const = 0;
   virtual void Save(const raft::RaftPersistState &state, const raft::Snapshot &snapshot) = 0;
 
   virtual int RaftStateSize() const = 0;

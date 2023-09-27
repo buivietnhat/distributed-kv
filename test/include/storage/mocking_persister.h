@@ -38,7 +38,8 @@ class MockingPersister : public PersistentInterface {
     return snapshot_;
   }
 
-  void ReadStateAndSnap(std::optional<raft::RaftPersistState> &state, std::optional<raft::Snapshot> snapshot) const override {
+  void ReadStateAndSnap(std::optional<raft::RaftPersistState> &state,
+                        std::optional<raft::Snapshot> snapshot) const override {
     std::lock_guard lock(mu_);
     state = state_;
     snapshot = snapshot_;

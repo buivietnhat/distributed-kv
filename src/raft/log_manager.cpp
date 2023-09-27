@@ -2,8 +2,7 @@
 
 namespace kv::raft {
 
-LogManager::LogManager(int me, apply_ch_t apply_channel)
-    : me_(me), apply_ch_(apply_channel) {
+LogManager::LogManager(int me, apply_ch_t apply_channel) : me_(me), apply_ch_(apply_channel) {
   log_.push_back({0, {}});
 }
 

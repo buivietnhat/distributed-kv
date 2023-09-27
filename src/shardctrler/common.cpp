@@ -13,6 +13,7 @@ Op GenerateJoinOp(int sender, const JoinArgs &args) {
   op.client_id_ = args.uuid_;
   op.seq_number_ = args.seq_number_;
   op.servers_ = args.servers_;
+  op.p_has_value_ = std::make_shared<bool>(false);
   op.promise_ = std::make_shared<std::promise<ShardConfig>>();
 
   return op;
@@ -25,6 +26,7 @@ Op GenerateLeaveOp(int sender, const LeaveArgs &args) {
   op.client_id_ = args.uuid_;
   op.seq_number_ = args.seq_number_;
   op.gids_ = args.gids_;
+  op.p_has_value_ = std::make_shared<bool>(false);
   op.promise_ = std::make_shared<std::promise<ShardConfig>>();
 
   return op;
@@ -38,6 +40,7 @@ Op GenerateMoveOp(int sender, const MoveArgs &args) {
   op.seq_number_ = args.seq_number_;
   op.shard_ = args.shard_;
   op.gid_ = args.gid_;
+  op.p_has_value_ = std::make_shared<bool>(false);
   op.promise_ = std::make_shared<std::promise<ShardConfig>>();
 
   return op;
@@ -50,6 +53,7 @@ Op GenerateQueryOp(int sender, const QueryArgs &args) {
   op.client_id_ = args.uuid_;
   op.seq_number_ = args.seq_number_;
   op.num_ = args.num_;
+  op.p_has_value_ = std::make_shared<bool>(false);
   op.promise_ = std::make_shared<std::promise<ShardConfig>>();
 
   return op;
@@ -129,9 +133,7 @@ void ShardConfig::UnserveAll() {
   }
 }
 
-void ShardConfig::RemoveGroup(int gid) {
-  groups_.erase(gid);
-}
+void ShardConfig::RemoveGroup(int gid) { groups_.erase(gid); }
 
 std::vector<int> ShardConfig::ShardsServedBy(int gid) const {
   std::vector<int> shard_list;

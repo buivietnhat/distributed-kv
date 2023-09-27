@@ -1,8 +1,9 @@
 #pragma once
 
 #include <mutex>
-#include "shardctrler/common.h"
+
 #include "raft/raft.h"
+#include "shardctrler/common.h"
 
 namespace kv::shardctrler {
 
@@ -32,9 +33,7 @@ class ShardCtrler {
 
   QueryReply Query(const QueryArgs &args);
 
-  inline raft::Raft *Raft() const {
-    return rf_.get();
-  }
+  inline raft::Raft *Raft() const { return rf_.get(); }
 
   inline void Kill() {
     rf_->Kill();
@@ -44,9 +43,7 @@ class ShardCtrler {
     apply_ch_->Enqueue({});
   }
 
-  inline bool Killed() const {
-    return dead_;
-  }
+  inline bool Killed() const { return dead_; }
 
  private:
   using enum Err;

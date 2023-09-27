@@ -4,8 +4,8 @@
 #include <string>
 #include <vector>
 
-#include "common/logger.h"
 #include "common/container/concurrent_blocking_queue.h"
+#include "common/logger.h"
 
 namespace kv::raft {
 

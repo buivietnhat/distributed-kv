@@ -324,13 +324,9 @@ void ShardCtrler::InstallCmdMsg(const Op &cmd) {
 
   lot_->PopulateLastOpInfo(cmd.client_id_, cmd.seq_number_, cfg);
 
-  if (cmd.sender_ == me_) {
-    try {
-      cmd.promise_->set_value(std::move(cfg));
-    } catch (...) {
-      // ok to just ignore it, since the exception will occur if we try to set value twice (why replay the log)
-    }
-
+  if (cmd.sender_ == me_ && *cmd.p_has_value_ == false) {
+    cmd.promise_->set_value(std::move(cfg));
+    *cmd.p_has_value_ = true;
   }
 }
 

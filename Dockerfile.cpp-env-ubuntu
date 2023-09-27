@@ -1,0 +1,30 @@
+# Build and run:
+#   docker build -t clion/ubuntu/cpp-env:1.0 -f Dockerfile.cpp-env-ubuntu .
+
+FROM ubuntu:22.04
+
+RUN DEBIAN_FRONTEND="noninteractive" apt-get update && apt-get -y install tzdata
+
+RUN apt-get update \
+  && apt-get install -y build-essential \
+      gcc-12 \
+      g++-12 \
+      gdb \
+      clang-12 \
+      clang-format-12 \
+      clang-tidy-12 \
+      libtbb-dev \
+      make \
+      ninja-build \
+      cmake \
+      autoconf \
+      automake \
+      libtool \
+      valgrind \
+      locales-all \
+      dos2unix \
+      rsync \
+      tar \
+  && apt-get clean
+
+RUN apt-get install -y build-essential

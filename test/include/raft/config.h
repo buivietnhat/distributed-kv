@@ -278,8 +278,8 @@ class Config {
     // but copy old persister's content so that we always
     // pass Make() the last persisted state.
     if (saved_[server_num] != nullptr) {
-//      auto state = saved_[server_num]->ReadRaftState();
-//      auto snap = saved_[server_num]->ReadRaftSnapshot();
+      //      auto state = saved_[server_num]->ReadRaftState();
+      //      auto snap = saved_[server_num]->ReadRaftSnapshot();
       std::optional<raft::RaftPersistState> state;
       std::optional<raft::Snapshot> snap;
       saved_[server_num]->ReadStateAndSnap(state, snap);

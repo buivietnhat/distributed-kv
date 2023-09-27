@@ -105,6 +105,7 @@ struct Op {
   int shard_;                                                  // for move cmd
   int gid_;                                                    // for move cmd
   int num_;                                                    // for query cmd
+  std::shared_ptr<bool> p_has_value_;
   std::shared_ptr<std::promise<ShardConfig>> promise_;
 };
 
