@@ -274,4 +274,154 @@ TEST(ShardCtrlerTest, TestBasic) {
   EXPECT_TRUE(cfg.Cleanup());
 }
 
+TEST(ShardCtrlerTest, TestMulti) {
+  const int nservers = 3;
+  Config cfg{nservers, false};
+
+  auto ck = cfg.MakeClient(cfg.All());
+
+  Logger::Debug(kDTest, -1, "Test: Multi-group join/leave ...\n");
+
+  std::vector<ShardConfig> cfa(6);
+  cfa[0] = ck->Query(-1);
+
+  Check({}, ck);
+
+  int gid1 = 1;
+  int gid2 = 2;
+  ck->Join({{gid1, {"x", "y", "z"}}, {gid2, {"a", "b", "c"}}});
+  Check({gid1, gid2}, ck);
+
+  int gid3 = 3;
+  ck->Join({{gid3, {"j", "k", "l"}}});
+  Check({gid1, gid2, gid3}, ck);
+  cfa[2] = ck->Query(-1);
+
+  auto cfx = ck->Query(-1);
+  auto sa1 = cfx.groups_[gid1];
+  if (sa1.size() != 3 || sa1[0] != "x" || sa1[1] != "y" || sa1[2] != "z") {
+    throw SHARDCTRLER_EXCEPTION(fmt::format("wrong servers for gid {}: {}", gid1, common::ToString(sa1)));
+  }
+  auto sa2 = cfx.groups_[gid2];
+  if (sa2.size() != 3 || sa2[0] != "a" || sa2[1] != "b" || sa2[2] != "c") {
+    throw SHARDCTRLER_EXCEPTION(fmt::format("wrong servers for gid {}: {}", gid2, common::ToString(sa2)));
+  }
+  auto sa3 = cfx.groups_[gid3];
+  if (sa3.size() != 3 || sa3[0] != "j" || sa3[1] != "k" || sa3[2] != "l") {
+    throw SHARDCTRLER_EXCEPTION(fmt::format("wrong servers for gid {}: {}", gid3, common::ToString(sa3)));
+  }
+
+  ck->Leave({gid1, gid3});
+  Check({gid2}, ck);
+  cfa[3] = ck->Query(-1);
+
+  cfx = ck->Query(-1);
+  sa2 = cfx.groups_[gid2];
+  if (sa2.size() != 3 || sa2[0] != "a" || sa2[1] != "b" || sa2[2] != "c") {
+    throw SHARDCTRLER_EXCEPTION(fmt::format("wrong servers for gid {}: {}", gid2, common::ToString(sa2)));
+  }
+
+  ck->Leave({gid2});
+  Logger::Debug(kDTest, -1, "  ... Passed\n");
+
+  Logger::Debug(kDTest, -1, "Test: Concurrent multi leave/join ...\n");
+  const int npara = 10;
+  std::vector<shardctrler::Clerk *> cka(npara);
+  for (int i = 0; i < npara; i++) {
+    cka[i] = cfg.MakeClient(cfg.All());
+  }
+  std::vector<int> gids(npara);
+  std::atomic<int> wg{0};
+  for (int xi = 0; xi < npara; xi++) {
+    wg += 1;
+    gids[xi] = xi + 1000;
+    std::thread([&, i = xi] {
+      auto gid = gids[i];
+      cka[i]->Join({
+          {gid, {fmt::format("{}a", gid), fmt::format("{}b", gid), fmt::format("{}c", gid)}},
+          {gid + 1000, {fmt::format("{}a", gid + 1000)}},
+          {gid + 2000, {fmt::format("{}a", gid + 2000)}},
+      });
+      cka[i]->Leave({gid + 1000, gid + 2000});
+      wg -= 1;
+    }).detach();
+  }
+
+  while (wg != 0) {}
+  Check(gids, ck);
+  Logger::Debug(kDTest, -1, "  ... Passed\n");
+
+  Logger::Debug(kDTest, -1, "Test: Minimal transfers after multijoins ...\n");
+
+  auto c1 = ck->Query(-1);
+  std::unordered_map<int, std::vector<std::string>> m;
+  for (int i = 0; i < 5; i++) {
+    auto gid = npara + 1 + i;
+    m[gid] = {fmt::format("{}a", gid), fmt::format("{}b", gid)};
+  }
+  ck->Join(m);
+  auto c2 = ck->Query(-1);
+  for (int i = 1; i <= npara; i++) {
+    for (uint32_t j = 0; j < c1.shards_.size(); j++) {
+      if (c2.shards_[j] == i) {
+        if (c1.shards_[j] != i) {
+          throw SHARDCTRLER_EXCEPTION("non-minimal transfer after Join()s");
+        }
+      }
+    }
+  }
+  Logger::Debug(kDTest, -1, "  ... Passed\n");
+
+  Logger::Debug(kDTest, -1, "Test: Minimal transfers after multileaves ...\n");
+
+  std::vector<int> l;
+  for (int i = 0; i < 5; i++) {
+    l.push_back(npara + 1 + i);
+  }
+  ck->Leave(l);
+  auto c3 = ck->Query(-1);
+  for (int i = 1; i <= npara; i++) {
+    for (uint32_t j = 0; j < c1.shards_.size(); j++) {
+      if (c2.shards_[j] == i) {
+        if (c3.shards_[j] != i) {
+          throw SHARDCTRLER_EXCEPTION("non-minimal transfer after Leave()s");
+        }
+      }
+    }
+  }
+
+  Logger::Debug(kDTest, -1, "  ... Passed\n");
+
+  Logger::Debug(kDTest, -1, "Test: Check Same config on servers ...\n");
+
+  auto [is_leader, leader] = cfg.Leader();
+  if (!is_leader) {
+    throw SHARDCTRLER_EXCEPTION("Leader not found");
+  }
+  auto c = ck->Query(-1); // Config leader claims
+
+  Logger::Debug(kDTest, -1, fmt::format("Shutdown Leader {}", leader));
+  cfg.ShutdownServer(leader);
+
+  auto attempts = 0;
+  while (true) {
+    auto [is_leader_new, leader_new] = cfg.Leader();
+    if (is_leader_new) {
+      break;
+    }
+    attempts++;
+    if (attempts == 3) {
+      throw SHARDCTRLER_EXCEPTION("Leader not found");
+    }
+    common::SleepMs(1000);
+  }
+
+  c1 = ck->Query(-1);
+  CheckSameConfig(c, c1);
+
+  Logger::Debug(kDTest, -1, "  ... Passed\n");
+
+  EXPECT_TRUE(cfg.Cleanup());
+}
+
 }  // namespace kv::shardctrler

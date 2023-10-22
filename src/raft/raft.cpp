@@ -16,7 +16,6 @@ Raft::Raft(std::vector<network::ClientEnd *> peers, uint32_t me,
   lm_ = std::make_unique<LogManager>(me_, apply_channel);
 
   // initialize from state persisted before a crash
-
   auto state = persister_->ReadRaftState();
   if (state) {
     ReadPersistState(*state);

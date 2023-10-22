@@ -27,7 +27,7 @@ set(KV_CLANG_SEARCH_PATH "/usr/local/bin" "/usr/bin" "/usr/local/opt/llvm/bin" "
 
 # attempt to find the binary if user did not specify
 find_program(CLANG_FORMAT_BIN
-        NAMES clang-format clang-format-16
+        NAMES clang-format clang-format-16 clang-format-12
         HINTS ${KV_CLANG_SEARCH_PATH})
 
 if ("${CLANG_FORMAT_BIN}" STREQUAL "CLANG_FORMAT_BIN-NOTFOUND")

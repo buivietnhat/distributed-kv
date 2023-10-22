@@ -310,8 +310,9 @@ void ShardCtrler::InstallCmdMsg(const Op &cmd) {
     Logger::Debug(kDDrop, me_,
                   fmt::format("InstallCmdMsg: client %d with seq %d has already been served, return ...",
                               cmd.client_id_ % kRound, cmd.seq_number_));
-    if (cmd.sender_ == me_) {
+    if (cmd.sender_ == me_ && *cmd.p_has_value_ == false) {
       cmd.promise_->set_value(std::move(config));
+      *cmd.p_has_value_ = true;
     }
     return;
   }

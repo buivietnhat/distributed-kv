@@ -5,6 +5,7 @@
 #include <random>
 #include <sstream>
 #include <thread>
+#include <unordered_map>
 
 namespace kv {
 

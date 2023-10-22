@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mutex>
+#include <optional>
 
 #include "common/thread_pool.h"
 #include "common/util.h"

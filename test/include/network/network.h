@@ -2,7 +2,6 @@
 
 #include <tbb/task_group.h>
 
-#include <format>
 #include <future>
 #include <iostream>
 #include <mutex>
@@ -81,6 +80,7 @@ struct Server {
 
   int GetCount() const { return count_; }
 
+  // TODO(nhat): refactor this to use std::visit, alot of duplicated code, and it's quite ugly
   ReplyMessage DispatchReq(const RequestMessage &req) {
     count_ += 1;
     switch (req.method_) {
@@ -373,7 +373,7 @@ class Network {
       if (req.chan_ == nullptr) {
         continue;
       }
-      std::thread([&, req = std::move(req)] { ProcessRequest(req); }).detach();
+      std::thread([&, req = std::move(req)] { ProcessRequest(std::move(req)); }).detach();
     }
   }
 

@@ -249,7 +249,7 @@ class Config {
     if (saved_[server_num] != nullptr) {
       auto state = saved_[server_num]->ReadRaftState();
       auto snap = saved_[server_num]->ReadRaftSnapshot();
-      saved_[server_num] = std::make_unique<storage::MockingPersister>(std::move(state), std::move(snap));
+      saved_[server_num] = std::make_shared<storage::MockingPersister>(std::move(state), std::move(snap));
     }
   }
 
@@ -283,7 +283,7 @@ class Config {
       std::optional<raft::RaftPersistState> state;
       std::optional<raft::Snapshot> snap;
       saved_[server_num]->ReadStateAndSnap(state, snap);
-      saved_[server_num] = std::make_unique<storage::MockingPersister>(std::move(state), std::move(snap));
+      saved_[server_num] = std::make_shared<storage::MockingPersister>(std::move(state), std::move(snap));
 
       if (snap && !snap->Empty()) {
         auto err = IngestSnap(server_num, *snap, -1);
@@ -292,7 +292,7 @@ class Config {
         }
       }
     } else {
-      saved_[server_num] = std::make_unique<storage::MockingPersister>();
+      saved_[server_num] = std::make_shared<storage::MockingPersister>();
     }
 
     mu_.unlock();
@@ -305,7 +305,7 @@ class Config {
     }
 
     apply_chs_[server_num] = std::make_shared<common::ConcurrentBlockingQueue<raft::ApplyMsg>>();
-    auto rf = std::make_unique<Raft>(std::move(ends), server_num, saved_[server_num].get(), apply_chs_[server_num]);
+    auto rf = std::make_unique<Raft>(std::move(ends), server_num, saved_[server_num], apply_chs_[server_num]);
 
     mu_.lock();
     rafts_[server_num] = std::move(rf);
@@ -600,7 +600,7 @@ class Config {
   std::vector<bool> connected_;
   std::vector<std::vector<std::string>> endnames_;
   std::vector<std::unordered_map<int, std::any>> logs_;
-  std::vector<std::unique_ptr<storage::PersistentInterface>> saved_;
+  std::vector<std::shared_ptr<storage::PersistentInterface>> saved_;
   std::vector<int> last_applied_;
   common::time_t t0_;     // time at which tester called Begin()
   common::time_t start_;  // time at which the Config constructor was called

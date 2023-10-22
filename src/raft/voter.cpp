@@ -160,8 +160,6 @@ void Voter::ResetElectionTimer() {
   last_heard_from_leader_ = common::Now();
 }
 
-Voter::~Voter() {
-  //  pool_.Wait();
-}
+Voter::~Voter() {}
 
 }  // namespace kv::raft
