@@ -209,7 +209,7 @@ AppendEntriesResult Raft::RequestAppendEntry(int server, int prev_log_idx, int p
         entries = lm_->GetEntries(new_prev_log_idx + 1);
         Logger::Debug(
             kDLeader, me_,
-            fmt::format("There's a conlicting entry for Server {} at idx {} and term {}, retry with new "
+            fmt::format("There's a conlicting entry for ShardKV {} at idx {} and term {}, retry with new "
                         "prevLogIdx = {}, prevLogTerm = {}",
                         server, args.prev_log_idx_, args.prev_log_term_, new_prev_log_idx, new_prev_log_term));
         RequestAppendEntry(server, new_prev_log_idx, new_prev_log_term, false, 0, std::move(entries));
@@ -224,7 +224,7 @@ AppendEntriesResult Raft::RequestAppendEntry(int server, int prev_log_idx, int p
     if (!Killed()) {
       Logger::Debug(
           kDInfo, me_,
-          fmt::format("Request to AE for Server {} for index {} term {} commit = {} has failed due to network error",
+          fmt::format("Request to AE for ShardKV {} for index {} term {} commit = {} has failed due to network error",
                       server, prev_log_idx + 1, prev_log_term, commit));
 
       if (lm_->GetStartIndex() != start_idx && commit) {
@@ -486,7 +486,7 @@ std::tuple<int, int, bool> Raft::Start(std::any command) {
 void Raft::SendSnapshot(int server, int last_included_index, int last_included_term, int leader_term,
                         std::shared_ptr<Snapshot> snapshot) {
   Logger::Debug(kDSnap, me_,
-                fmt::format("Send snapshot upto index {} and term {} to Server {}", last_included_index,
+                fmt::format("Send snapshot upto index {} and term {} to ShardKV {}", last_included_index,
                             last_included_term, server));
 
   InstallSnapshotArgs args;
@@ -509,7 +509,7 @@ void Raft::SendSnapshot(int server, int last_included_index, int last_included_t
 
     if (term_ < reply->term_) {
       Logger::Debug(kDSnap, me_,
-                    fmt::format("Transition to follower since Server{}'s term {} is greater than mine {}", server,
+                    fmt::format("Transition to follower since ShardKV{}'s term {} is greater than mine {}", server,
                                 reply->term_, term_));
       TransitionToFollower(reply->term_);
       l.unlock();

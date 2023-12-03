@@ -18,6 +18,7 @@
 #include "network/client_end.h"
 #include "raft/raft.h"
 #include "shardctrler/server.h"
+#include "shardkv/server.h"
 
 using namespace std::chrono_literals;
 
@@ -25,22 +26,24 @@ namespace kv::network {
 
 using RequestArgs =
     std::variant<int, raft::RequestVoteArgs, raft::AppendEntryArgs, raft::InstallSnapshotArgs, shardctrler::JoinArgs,
-                 shardctrler::LeaveArgs, shardctrler::MoveArgs, shardctrler::QueryArgs>;
+                 shardctrler::LeaveArgs, shardctrler::MoveArgs, shardctrler::QueryArgs, shardkv::PutAppendArgs,
+                 shardkv::GetArgs, shardkv::InstallShardArgs>;
 using ReplyArgs =
     std::variant<int, raft::RequestVoteReply, raft::AppendEntryReply, raft::InstallSnapshotReply,
-                 shardctrler::JoinReply, shardctrler::LeaveReply, shardctrler::MoveReply, shardctrler::QueryReply>;
+                 shardctrler::JoinReply, shardctrler::LeaveReply, shardctrler::MoveReply, shardctrler::QueryReply,
+                 shardkv::PutAppendReply, shardkv::GetReply, shardkv::InstallShardReply>;
 
-enum class Method : uint8_t {
-  RESERVERD,
-  TEST,
-  REQUEST_VOTE,
-  APPEND_ENTRIES,
-  INSTALL_SNAPSHOT,
-  QUERY,
-  JOIN,
-  LEAVE,
-  MOVE
-};
+// enum class Method : uint8_t {
+//   RESERVERD,
+//   TEST,
+//   REQUEST_VOTE,
+//   APPEND_ENTRIES,
+//   INSTALL_SNAPSHOT,
+//   QUERY,
+//   JOIN,
+//   LEAVE,
+//   MOVE
+// };
 
 struct ReplyMessage {
   bool ok_{false};
@@ -49,22 +52,23 @@ struct ReplyMessage {
 
 struct RequestMessage {
   std::string endname_;
-  Method method_;
+  //  Method method_;
   RequestArgs args_;
   common::Channel<ReplyMessage> *chan_;
 
-  RequestMessage(std::string endname, Method method, RequestArgs args, common::Channel<ReplyMessage> *chan)
-      : endname_(std::move(endname)), method_(method), args_(std::move(args)), chan_(chan) {}
+  RequestMessage(std::string endname, RequestArgs args, common::Channel<ReplyMessage> *chan)
+      : endname_(std::move(endname)), args_(std::move(args)), chan_(chan) {}
 
   RequestMessage() = default;
 };
 
 struct Server {
-  using enum Method;
+  //  using enum Method;
 
   std::mutex mu_;
   raft::Raft *raft_;
   shardctrler::ShardCtrler *shardctrler_;
+  shardkv::ShardKV *shardkv_;
 
   int count_{0};  // incoming RPCs
 
@@ -78,71 +82,176 @@ struct Server {
     shardctrler_ = shardctrler;
   }
 
+  void AddShardKV(shardkv::ShardKV *shardkv) {
+    std::lock_guard lock(mu_);
+    shardkv_ = shardkv;
+  }
+
   int GetCount() const { return count_; }
+
+  struct RequestDispatcher {
+    RequestDispatcher(Server *srv) : srv_(srv) {
+      if (srv_ == nullptr) {
+        throw std::runtime_error("Passing nullptr server to RequestDispatcher");
+      }
+    }
+
+    ReplyMessage operator()(int args) {
+      if (srv_->raft_ == nullptr) {
+        throw std::runtime_error("unknown raft service, expecting one");
+      }
+      auto rep = srv_->raft_->Test(args);
+      return {true, std::move(rep)};
+    }
+
+    ReplyMessage operator()(const raft::RequestVoteArgs &args) {
+      if (srv_->raft_ == nullptr) {
+        throw std::runtime_error("unknown raft service, expecting one");
+      }
+      auto rep = srv_->raft_->RequestVote(args);
+      return {true, std::move(rep)};
+    }
+
+    ReplyMessage operator()(const raft::AppendEntryArgs &args) {
+      if (srv_->raft_ == nullptr) {
+        throw std::runtime_error("unknown raft service, expecting one");
+      }
+      auto rep = srv_->raft_->AppendEntries(args);
+      return {true, std::move(rep)};
+    }
+
+    ReplyMessage operator()(const raft::InstallSnapshotArgs &args) {
+      if (srv_->raft_ == nullptr) {
+        throw std::runtime_error("unknown raft service, expecting one");
+      }
+      auto rep = srv_->raft_->InstallSnapshot(args);
+      return {true, std::move(rep)};
+    }
+
+    ReplyMessage operator()(const shardctrler::QueryArgs &args) {
+      if (srv_->shardctrler_ == nullptr) {
+        throw std::runtime_error("unknown shardctrler service, expecting one");
+      }
+      auto rep = srv_->shardctrler_->Query(args);
+      return {true, std::move(rep)};
+    }
+
+    ReplyMessage operator()(const shardctrler::JoinArgs &args) {
+      if (srv_->shardctrler_ == nullptr) {
+        throw std::runtime_error("unknown shardctrler service, expecting one");
+      }
+      auto rep = srv_->shardctrler_->Join(args);
+      return {true, std::move(rep)};
+    }
+
+    ReplyMessage operator()(const shardctrler::LeaveArgs &args) {
+      if (srv_->shardctrler_ == nullptr) {
+        throw std::runtime_error("unknown shardctrler service, expecting one");
+      }
+      auto rep = srv_->shardctrler_->Leave(args);
+      return {true, std::move(rep)};
+    }
+
+    ReplyMessage operator()(const shardctrler::MoveArgs &args) {
+      if (srv_->shardctrler_ == nullptr) {
+        throw std::runtime_error("unknown shardctrler service, expecting one");
+      }
+      auto rep = srv_->shardctrler_->Move(args);
+      return {true, std::move(rep)};
+    }
+
+    ReplyMessage operator()(const shardkv::PutAppendArgs &args) {
+      if (srv_->shardkv_ == nullptr) {
+        throw std::runtime_error("unknown shardkv service, expecting one");
+      }
+      auto rep = srv_->shardkv_->PutAppend(args);
+      return {true, std::move(rep)};
+    }
+
+    ReplyMessage operator()(const shardkv::GetArgs &args) {
+      if (srv_->shardkv_ == nullptr) {
+        throw std::runtime_error("unknown shardkv service, expecting one");
+      }
+      auto rep = srv_->shardkv_->Get(args);
+      return {true, std::move(rep)};
+    }
+
+    ReplyMessage operator()(const shardkv::InstallShardArgs &args) {
+      if (srv_->shardkv_ == nullptr) {
+        throw std::runtime_error("unknown shardkv service, expecting one");
+      }
+      auto rep = srv_->shardkv_->InstallShard(args);
+      return {true, std::move(rep)};
+    }
+
+    Server *srv_;
+  };
 
   // TODO(nhat): refactor this to use std::visit, alot of duplicated code, and it's quite ugly
   ReplyMessage DispatchReq(const RequestMessage &req) {
     count_ += 1;
-    switch (req.method_) {
-      case REQUEST_VOTE: {
-        if (raft_ == nullptr) {
-          throw std::runtime_error("unknown raft service, expecting one");
-        }
-        auto rep = raft_->RequestVote(std::get<raft::RequestVoteArgs>(req.args_));
-        return {true, std::move(rep)};
-      }
-      case APPEND_ENTRIES: {
-        if (raft_ == nullptr) {
-          throw std::runtime_error("unknown raft service, expecting one");
-        }
-        auto rep = raft_->AppendEntries(std::get<raft::AppendEntryArgs>(req.args_));
-        return {true, std::move(rep)};
-      }
-      case INSTALL_SNAPSHOT: {
-        if (raft_ == nullptr) {
-          throw std::runtime_error("unknown raft service, expecting one");
-        }
-        auto rep = raft_->InstallSnapshot(std::get<raft::InstallSnapshotArgs>(req.args_));
-        return {true, std::move(rep)};
-      }
-      case QUERY: {
-        if (shardctrler_ == nullptr) {
-          throw std::runtime_error("unknown shardctrler service, expecting one");
-        }
-        auto rep = shardctrler_->Query(std::get<shardctrler::QueryArgs>(req.args_));
-        return {true, std::move(rep)};
-      }
-      case JOIN: {
-        if (shardctrler_ == nullptr) {
-          throw std::runtime_error("unknown shardctrler service, expecting one");
-        }
-        auto rep = shardctrler_->Join(std::get<shardctrler::JoinArgs>(req.args_));
-        return {true, std::move(rep)};
-      }
-      case LEAVE: {
-        if (shardctrler_ == nullptr) {
-          throw std::runtime_error("unknown shardctrler service, expecting one");
-        }
-        auto rep = shardctrler_->Leave(std::get<shardctrler::LeaveArgs>(req.args_));
-        return {true, std::move(rep)};
-      }
-      case MOVE: {
-        if (shardctrler_ == nullptr) {
-          throw std::runtime_error("unknown shardctrler service, expecting one");
-        }
-        auto rep = shardctrler_->Move(std::get<shardctrler::MoveArgs>(req.args_));
-        return {true, std::move(rep)};
-      }
-      case TEST: {
-        if (raft_ == nullptr) {
-          throw std::runtime_error("unknown raft service, expecting one");
-        }
-        auto rep = raft_->Test(std::get<int>(req.args_));
-        return {true, std::move(rep)};
-      }
-      default:
-        return {};
-    }
+
+    return std::visit(RequestDispatcher{this}, req.args_);
+    //    switch (req.method_) {
+    //      case REQUEST_VOTE: {
+    //        if (raft_ == nullptr) {
+    //          throw std::runtime_error("unknown raft service, expecting one");
+    //        }
+    //        auto rep = raft_->RequestVote(std::get<raft::RequestVoteArgs>(req.args_));
+    //        return {true, std::move(rep)};
+    //      }
+    //      case APPEND_ENTRIES: {
+    //        if (raft_ == nullptr) {
+    //          throw std::runtime_error("unknown raft service, expecting one");
+    //        }
+    //        auto rep = raft_->AppendEntries(std::get<raft::AppendEntryArgs>(req.args_));
+    //        return {true, std::move(rep)};
+    //      }
+    //      case INSTALL_SNAPSHOT: {
+    //        if (raft_ == nullptr) {
+    //          throw std::runtime_error("unknown raft service, expecting one");
+    //        }
+    //        auto rep = raft_->InstallSnapshot(std::get<raft::InstallSnapshotArgs>(req.args_));
+    //        return {true, std::move(rep)};
+    //      }
+    //      case QUERY: {
+    //        if (shardctrler_ == nullptr) {
+    //          throw std::runtime_error("unknown shardctrler service, expecting one");
+    //        }
+    //        auto rep = shardctrler_->Query(std::get<shardctrler::QueryArgs>(req.args_));
+    //        return {true, std::move(rep)};
+    //      }
+    //      case JOIN: {
+    //        if (shardctrler_ == nullptr) {
+    //          throw std::runtime_error("unknown shardctrler service, expecting one");
+    //        }
+    //        auto rep = shardctrler_->Join(std::get<shardctrler::JoinArgs>(req.args_));
+    //        return {true, std::move(rep)};
+    //      }
+    //      case LEAVE: {
+    //        if (shardctrler_ == nullptr) {
+    //          throw std::runtime_error("unknown shardctrler service, expecting one");
+    //        }
+    //        auto rep = shardctrler_->Leave(std::get<shardctrler::LeaveArgs>(req.args_));
+    //        return {true, std::move(rep)};
+    //      }
+    //      case MOVE: {
+    //        if (shardctrler_ == nullptr) {
+    //          throw std::runtime_error("unknown shardctrler service, expecting one");
+    //        }
+    //        auto rep = shardctrler_->Move(std::get<shardctrler::MoveArgs>(req.args_));
+    //        return {true, std::move(rep)};
+    //      }
+    //      case TEST: {
+    //        if (raft_ == nullptr) {
+    //          throw std::runtime_error("unknown raft service, expecting one");
+    //        }
+    //        auto rep = raft_->Test(std::get<int>(req.args_));
+    //        return {true, std::move(rep)};
+    //      }
+    //      default:
+    //        return {};
+    //    }
   }
 };
 
@@ -157,7 +266,7 @@ class MockingClientEnd : public ClientEnd {
     }
 
     common::Channel<ReplyMessage> chan;
-    RequestMessage req_msg{endname_, REQUEST_VOTE, args, &chan};
+    RequestMessage req_msg{endname_, args, &chan};
     chan_.Send(req_msg);
 
     auto reply = req_msg.chan_->Receive();
@@ -175,7 +284,7 @@ class MockingClientEnd : public ClientEnd {
     }
 
     common::Channel<ReplyMessage> chan;
-    RequestMessage req_msg{endname_, APPEND_ENTRIES, args, &chan};
+    RequestMessage req_msg{endname_, args, &chan};
     chan_.Send(req_msg);
 
     auto reply = req_msg.chan_->Receive();
@@ -192,7 +301,7 @@ class MockingClientEnd : public ClientEnd {
     }
 
     common::Channel<ReplyMessage> chan;
-    RequestMessage req_msg{endname_, INSTALL_SNAPSHOT, args, &chan};
+    RequestMessage req_msg{endname_, args, &chan};
     chan_.Send(req_msg);
 
     auto reply = req_msg.chan_->Receive();
@@ -210,7 +319,7 @@ class MockingClientEnd : public ClientEnd {
 
     common::Channel<ReplyMessage> chan;
 
-    RequestMessage req_msg{endname_, QUERY, args, &chan};
+    RequestMessage req_msg{endname_, args, &chan};
     chan_.Send(req_msg);
 
     auto reply = req_msg.chan_->Receive();
@@ -227,7 +336,7 @@ class MockingClientEnd : public ClientEnd {
     }
 
     common::Channel<ReplyMessage> chan;
-    RequestMessage req_msg{endname_, JOIN, args, &chan};
+    RequestMessage req_msg{endname_, args, &chan};
     chan_.Send(req_msg);
 
     auto reply = req_msg.chan_->Receive();
@@ -244,7 +353,7 @@ class MockingClientEnd : public ClientEnd {
     }
 
     common::Channel<ReplyMessage> chan;
-    RequestMessage req_msg{endname_, LEAVE, args, &chan};
+    RequestMessage req_msg{endname_, args, &chan};
     chan_.Send(req_msg);
 
     auto reply = req_msg.chan_->Receive();
@@ -261,12 +370,63 @@ class MockingClientEnd : public ClientEnd {
     }
 
     common::Channel<ReplyMessage> chan;
-    RequestMessage req_msg{endname_, MOVE, args, &chan};
+    RequestMessage req_msg{endname_, args, &chan};
     chan_.Send(req_msg);
 
     auto reply = req_msg.chan_->Receive();
     if (reply.ok_) {
       return std::get<shardctrler::MoveReply>(reply.args_);
+    }
+
+    return {};
+  }
+
+  std::optional<shardkv::GetReply> Get(const shardkv::GetArgs &args) const override {
+    if (finished_) {
+      return {};
+    }
+
+    common::Channel<ReplyMessage> chan;
+    RequestMessage req_msg{endname_, args, &chan};
+    chan_.Send(req_msg);
+
+    auto reply = req_msg.chan_->Receive();
+    if (reply.ok_) {
+      return std::get<shardkv::GetReply>(reply.args_);
+    }
+
+    return {};
+  }
+
+  std::optional<shardkv::PutAppendReply> PutAppend(const shardkv::PutAppendArgs &args) const override {
+    if (finished_) {
+      return {};
+    }
+
+    common::Channel<ReplyMessage> chan;
+    RequestMessage req_msg{endname_, args, &chan};
+    chan_.Send(req_msg);
+
+    auto reply = req_msg.chan_->Receive();
+    if (reply.ok_) {
+      return std::get<shardkv::PutAppendReply>(reply.args_);
+    }
+
+    return {};
+  }
+
+  std::optional<shardkv::InstallShardReply> InstallShard(const shardkv::InstallShardArgs &args) const override {
+    if (finished_) {
+      return {};
+    }
+
+    common::Channel<ReplyMessage> chan;
+    RequestMessage req_msg{endname_, args, &chan};
+    chan_.Send(req_msg);
+
+    auto reply = req_msg.chan_->Receive();
+    if (reply.ok_) {
+      return std::get<shardkv::InstallShardReply>(reply.args_);
     }
 
     return {};
@@ -279,7 +439,7 @@ class MockingClientEnd : public ClientEnd {
     }
 
     common::Channel<ReplyMessage> chan;
-    RequestMessage req_msg{endname_, TEST, input, &chan};
+    RequestMessage req_msg{endname_, input, &chan};
     chan_.Send(req_msg);
 
     auto reply = req_msg.chan_->Receive();
@@ -293,7 +453,7 @@ class MockingClientEnd : public ClientEnd {
   void Terminate() override { finished_ = true; }
 
  private:
-  using enum Method;
+  //  using enum Method;
 
   std::string endname_;
   common::Channel<RequestMessage> &chan_;

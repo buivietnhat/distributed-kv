@@ -347,7 +347,8 @@ TEST(ShardCtrlerTest, TestMulti) {
     }).detach();
   }
 
-  while (wg != 0) {}
+  while (wg != 0) {
+  }
   Check(gids, ck);
   Logger::Debug(kDTest, -1, "  ... Passed\n");
 
@@ -398,7 +399,7 @@ TEST(ShardCtrlerTest, TestMulti) {
   if (!is_leader) {
     throw SHARDCTRLER_EXCEPTION("Leader not found");
   }
-  auto c = ck->Query(-1); // Config leader claims
+  auto c = ck->Query(-1);  // Config leader claims
 
   Logger::Debug(kDTest, -1, fmt::format("Shutdown Leader {}", leader));
   cfg.ShutdownServer(leader);

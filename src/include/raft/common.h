@@ -24,7 +24,14 @@ struct RaftPersistState {
   int last_included_term_{0};
   std::vector<LogEntry> logs_;
 
-  size_t Size() const { return 4 * 5 + logs_.size(); }
+  size_t Size() const {
+    // the first entry is just a fake one
+    if (logs_.size() <= 1) {
+      return 0;
+    }
+
+    return logs_.size() - 1;
+  }
 };
 
 struct RaftState {

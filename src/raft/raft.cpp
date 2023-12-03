@@ -10,7 +10,7 @@ namespace kv::raft {
 Raft::Raft(std::vector<network::ClientEnd *> peers, uint32_t me,
            std::shared_ptr<storage::PersistentInterface> persister, apply_ch_t apply_channel)
     : peers_(peers), persister_(persister), me_(me) {
-  Logger::Debug(kDTrace, me_, "....... Start .......");
+//  Logger::Debug(kDTrace, me_, "....... Start .......");
 
   voter_ = std::make_unique<Voter>(peers, me_);
   lm_ = std::make_unique<LogManager>(me_, apply_channel);

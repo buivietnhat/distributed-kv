@@ -30,6 +30,8 @@ static constexpr const char *kDCler = "CLER";
 static constexpr const char *kDDupl = "DUPL";
 static constexpr const char *kDTrck = "TRCK";
 static constexpr const char *kDShardCtr = "SCTR";
+static constexpr const char *kDSnp1 = "SNP1";
+static constexpr const char *kDLeader1 = "LED1";
 
 }  // namespace kv
 
@@ -47,6 +49,20 @@ class Logger {
       prefix = fmt::format("{} {} ", CurrentTimeMs(), topic);
     } else {
       prefix = fmt::format("{} {} [{}] ", CurrentTimeMs(), topic, server);
+    }
+
+    auto log = prefix + message + "\n";
+    std::cout << log;
+#endif
+  }
+
+  static inline void Debug1(const Topic &topic, int server, int gid, const std::string &message) {
+#ifndef NDEBUG
+    std::string prefix;
+    if (server == -1) {
+      prefix = fmt::format("{} {} ", CurrentTimeMs(), topic);
+    } else {
+      prefix = fmt::format("{} {} [{}]({}) ", CurrentTimeMs(), topic, gid - 100, server);
     }
 
     auto log = prefix + message + "\n";

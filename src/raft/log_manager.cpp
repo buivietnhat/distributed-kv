@@ -118,7 +118,7 @@ void LogManager::CommitEntries(int start_idx, int from_idx, int to_idx) {
   std::lock_guard apply_lock(apply_mu_);
   std::unique_lock l(mu_);
   if (commid_idx_ >= from_idx || from_idx < start_idx_) {
-    Logger::Debug(kDDrop, me_,
+    Logger::Debug(kDInfo, me_,
                   "Someone has tried to commited the newer index or just installed snapshot, I should return now");
     return;
   }

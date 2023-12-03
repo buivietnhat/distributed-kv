@@ -18,7 +18,7 @@ kv::shardctrler::ShardConfig kv::shardctrler::Clerk::Query(int num) {
   args.uuid_ = uuid_;
   args.num_ = num;
 
-  while (true) {
+  while (!Killed()) {
     // try each known server
     for (auto *srv : servers_) {
       auto reply = srv->Query(args);
@@ -29,6 +29,8 @@ kv::shardctrler::ShardConfig kv::shardctrler::Clerk::Query(int num) {
 
     common::SleepMs(100);
   }
+
+  return {};
 }
 
 void kv::shardctrler::Clerk::Join(const std::unordered_map<int, std::vector<std::string>> &servers) {
@@ -66,7 +68,7 @@ void kv::shardctrler::Clerk::Leave(const std::vector<int> &gids) {
 
   args.uuid_ = uuid_;
 
-  while (true) {
+  while (!Killed()) {
     // try each known server
     for (auto *srv : servers_) {
       auto reply = srv->Leave(args);
@@ -91,7 +93,7 @@ void kv::shardctrler::Clerk::Move(int shard, int gid) {
 
   args.uuid_ = uuid_;
 
-  while (true) {
+  while (!Killed()) {
     // try each known server
     for (auto *srv : servers_) {
       auto reply = srv->Move(args);

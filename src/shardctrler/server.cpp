@@ -4,6 +4,7 @@
 #include <unordered_set>
 
 #include "common/exception.h"
+#include "shardkv/server.h"
 
 using namespace std::chrono_literals;
 
@@ -55,7 +56,7 @@ JoinReply ShardCtrler::Join(const JoinArgs &args) {
   }
 
   Logger::Debug(kDShardCtr, me_,
-                fmt::format("Receive Join request from client {} with joined Server {}", args.uuid_ % kRound,
+                fmt::format("Receive Join request from client {} with joined ShardKV {}", args.uuid_ % kRound,
                             common::KeysToString(args.servers_)));
 
   // check if the request've already been served
@@ -220,7 +221,7 @@ QueryReply ShardCtrler::Query(const QueryArgs &args) {
   }
 
   Logger::Debug(
-      kDShardCtr, me_,
+      kDInfo, me_,
       fmt::format("Receive Query request from client {} with config number {}", args.uuid_ % kRound, args.num_));
 
   // check if the request've already been served
@@ -440,7 +441,7 @@ ShardConfig ShardCtrler::GenerateNewQueryConfig(const Op &cmd) {
   }
 
   if (cmd.sender_ == me_) {
-    Logger::Debug(kDShardCtr, me_,
+    Logger::Debug(kDInfo, me_,
                   fmt::format("New config num {}: {} return with Num {}, group {}", cfg.num_, cfg.ShardsToString(),
                               cmd.num_, common::KeysToString(cfg.groups_)));
   }
@@ -448,3 +449,4 @@ ShardConfig ShardCtrler::GenerateNewQueryConfig(const Op &cmd) {
 }
 
 }  // namespace kv::shardctrler
+

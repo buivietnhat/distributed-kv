@@ -6,6 +6,7 @@
 #include <sstream>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace kv {
 
@@ -111,6 +112,17 @@ inline std::string ToString(const std::unordered_map<K, V> &map) {
   ss << "[ ";
   for (const auto [k, v] : map) {
     ss << "{" << k << "," << v << "} ";
+  }
+  ss << "]";
+  return ss.str();
+}
+
+template <typename T>
+inline std::string ToString(const std::unordered_set<T> &set) {
+  std::stringstream ss;
+  ss << "[ ";
+  for (const auto &v : set) {
+    ss << v << " ";
   }
   ss << "]";
   return ss.str();

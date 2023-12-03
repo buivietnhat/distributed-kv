@@ -17,11 +17,16 @@ class Clerk {
 
   void Move(int shard, int gid);
 
+  inline void Kill() { dead_ = true; }
+
+  inline bool Killed() { return dead_ == true; }
+
  private:
   std::vector<network::ClientEnd *> servers_;
   std::mutex mu_;
   uint64_t uuid_;
   uint64_t seq_number_;
+  bool dead_{false};
 };
 
 }  // namespace kv::shardctrler

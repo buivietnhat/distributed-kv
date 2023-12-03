@@ -7,6 +7,7 @@
 #include <unordered_set>
 
 #include "common/logger.h"
+#include "nlohmann/json.hpp"
 
 namespace kv::shardctrler {
 
@@ -116,5 +117,15 @@ Op GenerateLeaveOp(int sender, const LeaveArgs &args);
 Op GenerateMoveOp(int sender, const MoveArgs &args);
 
 Op GenerateQueryOp(int sender, const QueryArgs &args);
+
+inline void to_json(nlohmann::json &j, const ShardConfig &cfg) {
+  j = nlohmann::json{{"num", cfg.num_}, {"shard", cfg.shards_}, {"group", cfg.groups_}};
+}
+
+inline void from_json(const nlohmann::json &j, ShardConfig &cfg) {
+  j.at("num").get_to(cfg.num_);
+  j.at("shard").get_to(cfg.shards_);
+  j.at("group").get_to(cfg.groups_);
+}
 
 }  // namespace kv::shardctrler

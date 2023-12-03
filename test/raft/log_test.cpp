@@ -37,7 +37,7 @@ TEST(RaftLogTest, FollowerFailure) {
 
   // disconnect one follower from the network
   auto leader1 = cfg.CheckOneLeader();
-  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader1 + 1) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", (leader1 + 1) % servers));
   cfg.Disconnect((leader1 + 1) % servers);
 
   // the leader and remaining folloer should be able to agree despite the disconnected follower
@@ -47,8 +47,8 @@ TEST(RaftLogTest, FollowerFailure) {
 
   // disconnect the remaining follower
   auto leader2 = cfg.CheckOneLeader();
-  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader2 + 1) % servers));
-  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader2 + 2) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", (leader2 + 1) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", (leader2 + 2) % servers));
   cfg.Disconnect((leader2 + 1) % servers);
   cfg.Disconnect((leader2 + 2) % servers);
 
@@ -123,7 +123,7 @@ TEST(RaftLogTest, FailAgree) {
   // disconnect one follower from the network
   auto leader = cfg.CheckOneLeader();
   cfg.Disconnect((leader + 1) % servers);
-  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader + 1) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", (leader + 1) % servers));
 
   // the leader and remaining follower should be able to agree
   // despite the disconnected follower
@@ -134,7 +134,7 @@ TEST(RaftLogTest, FailAgree) {
   cfg.One(105, servers - 1, false);
 
   // re-connect
-  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", (leader + 1) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Connect with ShardKV {}", (leader + 1) % servers));
   cfg.Connect((leader + 1) % servers);
 
   // the full set of servers should preserve previous agreements, and be able to
@@ -156,9 +156,9 @@ TEST(RaftLogTest, NoAgree) {
 
   // 3 of 5 followers disconnect
   auto leader = cfg.CheckOneLeader();
-  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader + 1) % servers));
-  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader + 2) % servers));
-  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader + 3) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", (leader + 1) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", (leader + 2) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", (leader + 3) % servers));
   cfg.Disconnect((leader + 1) % servers);
   cfg.Disconnect((leader + 2) % servers);
   cfg.Disconnect((leader + 3) % servers);
@@ -179,9 +179,9 @@ TEST(RaftLogTest, NoAgree) {
   }
 
   // repair
-  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", (leader + 1) % servers));
-  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", (leader + 2) % servers));
-  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", (leader + 3) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Connect with ShardKV {}", (leader + 1) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Connect with ShardKV {}", (leader + 2) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Connect with ShardKV {}", (leader + 3) % servers));
   cfg.Connect((leader + 1) % servers);
   cfg.Connect((leader + 2) % servers);
   cfg.Connect((leader + 3) % servers);
@@ -254,9 +254,9 @@ TEST(RaftLogTest, Backup) {
 
   // put leader and one follower in a partition
   auto leader1 = cfg.CheckOneLeader();
-  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader1 + 2) % servers));
-  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader1 + 3) % servers));
-  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader1 + 4) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", (leader1 + 2) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", (leader1 + 3) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", (leader1 + 4) % servers));
   cfg.Disconnect((leader1 + 2) % servers);
   cfg.Disconnect((leader1 + 3) % servers);
   cfg.Disconnect((leader1 + 4) % servers);
@@ -268,15 +268,15 @@ TEST(RaftLogTest, Backup) {
 
   common::SleepMs(RAFT_ELECTION_TIMEOUT / 2);
 
-  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader1 + 0) % servers));
-  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader1 + 1) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", (leader1 + 0) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", (leader1 + 1) % servers));
   cfg.Disconnect((leader1 + 0) % servers);
   cfg.Disconnect((leader1 + 1) % servers);
 
   // allow other partition to recover
-  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", (leader1 + 2) % servers));
-  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", (leader1 + 3) % servers));
-  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", (leader1 + 4) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Connect with ShardKV {}", (leader1 + 2) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Connect with ShardKV {}", (leader1 + 3) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Connect with ShardKV {}", (leader1 + 4) % servers));
   cfg.Connect((leader1 + 2) % servers);
   cfg.Connect((leader1 + 3) % servers);
   cfg.Connect((leader1 + 4) % servers);
@@ -292,7 +292,7 @@ TEST(RaftLogTest, Backup) {
   if (leader2 == other) {
     other = (leader2 + 1) % servers;
   }
-  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", other));
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", other));
   cfg.Disconnect(other);
 
   // lots more commands that won't commit
@@ -304,13 +304,13 @@ TEST(RaftLogTest, Backup) {
 
   // bring original leader back to life
   for (int i = 0; i < servers; i++) {
-    Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", i));
+    Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", i));
     cfg.Disconnect(i);
   }
 
-  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", (leader1 + 0) % servers));
-  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", (leader1 + 1) % servers));
-  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", other));
+  Logger::Debug(kDTest, -1, fmt::format("Connect with ShardKV {}", (leader1 + 0) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Connect with ShardKV {}", (leader1 + 1) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Connect with ShardKV {}", other));
   cfg.Connect((leader1 + 0) % servers);
   cfg.Connect((leader1 + 1) % servers);
   cfg.Connect(other);
@@ -322,7 +322,7 @@ TEST(RaftLogTest, Backup) {
 
   // now everyone
   for (int i = 0; i < servers; i++) {
-    Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", i));
+    Logger::Debug(kDTest, -1, fmt::format("Connect with ShardKV {}", i));
     cfg.Connect(i);
   }
 
