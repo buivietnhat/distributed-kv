@@ -364,7 +364,7 @@ ShardConfig ShardCtrler::GenerateNewJoinConfig(const Op &cmd) {
   // then add newly added group of servers
   for (const auto &[gid, servers] : cmd.servers_) {
     if (cfg.groups_.contains(gid)) {
-      throw SHARDCTRLER_EXCEPTION(fmt::format("Group {} already existed in Config num %d", gid, cfg.num_));
+      throw SHARDCTRLER_EXCEPTION(fmt::format("Group {} already existed in Config num {}", gid, cfg.num_));
     }
     cfg.groups_[gid] = servers;
   }
@@ -373,10 +373,9 @@ ShardConfig ShardCtrler::GenerateNewJoinConfig(const Op &cmd) {
   cfg.BalanceShards(available_shards, revoked_gids);
 
   if (cmd.sender_ == me_) {
-    Logger::Debug(
-        kDShardCtr, me_,
-        fmt::format("Config will change {} to {} after Join request: {} --> {}, group {}", cfg.num_, cfg.num_ + 1,
-                    configs_.back().ShardsToString(), cfg.ShardsToString(), common::KeysToString(cfg.groups_)));
+    Logger::Debug(kDShardCtr, me_,
+                  fmt::format("Config will change to {} after Join request:  {}, group {}", cfg.num_ + 1,
+                              cfg.ShardsToString(), common::KeysToString(cfg.groups_)));
   }
 
   // assign a new configuration number
@@ -403,8 +402,7 @@ ShardConfig ShardCtrler::GenerateNewLeaveConfig(const Op &cmd) {
 
   if (cmd.sender_ == me_) {
     Logger::Debug(kDShardCtr, me_,
-                  fmt::format("Config will change {} to {} after Leave request: {} --> {}", cfg.num_, cfg.num_ + 1,
-                              configs_.back().ShardsToString(), cfg.ShardsToString()));
+                  fmt::format("Config will change to {} after Leave request: {}", cfg.num_ + 1, cfg.ShardsToString()));
   }
 
   // assign a new configuration number
@@ -449,4 +447,3 @@ ShardConfig ShardCtrler::GenerateNewQueryConfig(const Op &cmd) {
 }
 
 }  // namespace kv::shardctrler
-

@@ -191,7 +191,9 @@ void ShardKV::InstallCmdMsg(const Op &cmd, int cmd_index) {
           return;
         }
 
-        pending_shards_ready_ch_.Close();
+        if (pending_shards_ready_ch_.HasReceiver()) {
+          pending_shards_ready_ch_.Send(true);
+        }
       }
       break;
     }

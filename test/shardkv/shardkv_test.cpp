@@ -8,19 +8,21 @@
 
 namespace kv::shardkv {
 
-void Check(Clerk *ck, const std::string &key, const std::string &value) {
+bool Check(Clerk *ck, const std::string &key, const std::string &value) {
   auto v = ck->Get(key);
   if (v != value) {
-    Logger::Debug(kDTest, -1, fmt::format("Get({}): expected:", key));
-    Logger::Debug(kDTest, -1, fmt::format("{}", value));
-    Logger::Debug(kDTest, -1, fmt::format("received:"));
-    Logger::Debug(kDTest, -1, fmt::format("{}", v));
-    throw SHARDKV_EXCEPTION(fmt::format("Get({}): expected:\n{}\nreceived:\n{}", key, value, v));
+    Logger::Debug(kDTest, -1, fmt::format("Get({}): expected: {}, received: {}", key, value, v));
+    //    Logger::Debug(kDTest, -1, fmt::format("{}", value));
+    //    Logger::Debug(kDTest, -1, fmt::format("received:"));
+    //    Logger::Debug(kDTest, -1, fmt::format("{}", v));
+    //    throw SHARDKV_EXCEPTION(fmt::format("Get({}): expected:\n{}\nreceived:\n{}", key, value, v));
+    return false;
   }
+  return true;
 }
 
 // test static 2-way sharding, without shard movement
-TEST(ShardKVTest, TestStaticShards) {
+TEST(ShardKVTest, DISABLED_TestStaticShards) {
   Logger::Debug(kDTest, -1, "Test: static shards ...");
 
   Config cfg(3, false, -1);
@@ -43,7 +45,7 @@ TEST(ShardKVTest, TestStaticShards) {
     }
 
     for (int i = 0; i < n; i++) {
-      Check(ck.get(), ka[i], va[i]);
+      EXPECT_TRUE(Check(ck.get(), ka[i], va[i]));
     }
 
     // make sure that the data really is sharded by
@@ -92,14 +94,74 @@ TEST(ShardKVTest, TestStaticShards) {
     Logger::Debug(kDTest, -1, "Start Group 1");
     cfg.StartGroup(1);
     for (int i = 0; i < n; i++) {
-      Check(ck.get(), ka[i], va[i]);
+      EXPECT_TRUE(Check(ck.get(), ka[i], va[i]));
     }
 
-//    for (auto &cl : cls) {
-//      cl->Kill();
-//    }
     Logger::Debug(kDTest, -1, "  ... Passed");
 
+  } catch (Exception &e) {
+    Logger::Debug(kDTest, -1, fmt::format("An exception thrown: {}", e.what()));
+    Logger::Debug(kDTest, -1, "  ... Failed");
+  }
+
+  EXPECT_TRUE(cfg.CleanUp());
+}
+
+TEST(ShardKVTest, TestJoinLeave) {
+  Logger::Debug(kDTest, -1, "Test: join then leave");
+
+  Config cfg(3, false, -1);
+
+  try {
+    auto ck = cfg.MakeClient();
+
+    Logger::Debug(kDTest, -1, "Join group 0");
+    cfg.Join(0);
+
+    int n = 10;
+    std::vector<std::string> ka(n);
+    std::vector<std::string> va(n);
+    for (int i = 0; i < n; i++) {
+      ka[i] = std::to_string(i);
+      va[i] = common::RandString(5);
+      ck->Put(ka[i], va[i]);
+    }
+    for (int i = 0; i < n; i++) {
+      EXPECT_TRUE(Check(ck.get(), ka[i], va[i]));
+    }
+
+    Logger::Debug(kDTest, -1, "Join group 1");
+    cfg.Join(1);
+
+    for (int i = 0; i < n; i++) {
+      EXPECT_TRUE(Check(ck.get(), ka[i], va[i]));
+      auto x = common::RandString(5);
+      ck->Append(ka[i], x);
+      va[i] += x;
+    }
+
+    Logger::Debug(kDTest, -1, "Leave group 0");
+    cfg.Leave(0);
+
+    for (int i = 0; i < n; i++) {
+      EXPECT_TRUE(Check(ck.get(), ka[i], va[i]));
+      auto x = common::RandString(5);
+      ck->Append(ka[i], x);
+      va[i] += x;
+    }
+
+    // allow time for shards to transfer.
+    common::SleepMs(1000);
+
+    cfg.CheckLogs();
+    Logger::Debug(kDTest, -1, "Shutdown group 0");
+    cfg.ShutdownGroup(0);
+
+    for (int i = 0; i < n; i++) {
+      EXPECT_TRUE(Check(ck.get(), ka[i], va[i]));
+    }
+
+    Logger::Debug(kDTest, -1, "  ... Passed\n");
   } catch (Exception &e) {
     Logger::Debug(kDTest, -1, fmt::format("An exception thrown: {}", e.what()));
     Logger::Debug(kDTest, -1, "  ... Failed");

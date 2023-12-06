@@ -25,6 +25,11 @@ class Channel {
 
   bool IsClose() const { return closed_; }
 
+  bool HasReceiver() const {
+    std::lock_guard l(mu_);
+    return has_receiver_;
+  }
+
  private:
   T DoReceive(std::optional<int> timeout) {
     if (closed_) {
@@ -88,7 +93,7 @@ class Channel {
   T val_;
   bool has_value_{false};
   bool has_receiver_{false};
-  std::mutex mu_;
+  mutable std::mutex mu_;
   std::condition_variable cond_;
   std::atomic<bool> closed_{false};
 };
