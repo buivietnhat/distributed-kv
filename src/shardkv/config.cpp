@@ -58,7 +58,7 @@ void ShardKV::SendInstallConfig(const shardctrler::ShardConfig &cfg) {
 
   // wait for the reply, max 2 seconds
   auto fut = op.promise_.p_->get_future();
-  auto status = fut.wait_for(2s);
+  auto status = fut.wait_for(5s);
 
   if (Killed()) {
     Logger::Debug(kDTrace, me_, "InstallConfig: return while waiting for the result");
@@ -66,7 +66,7 @@ void ShardKV::SendInstallConfig(const shardctrler::ShardConfig &cfg) {
   }
 
   if (status == std::future_status::timeout) {
-    Logger::Debug(kDTrace, me_, "InstallConfig: Timeout (2s) waiting for the result");
+    Logger::Debug(kDTrace, me_, "InstallConfig: Timeout (5s) waiting for the result");
     return;
   }
 
@@ -96,7 +96,7 @@ void ShardKV::SendRemoveShard(int shard, int config_num) {
 
   // wait for the reply, max 2 seconds
   auto fut = op.promise_.p_->get_future();
-  auto status = fut.wait_for(2s);
+  auto status = fut.wait_for(5s);
 
   if (Killed()) {
     Logger::Debug(kDTrace, me_, "RemoveShard: return while waiting for the result");
@@ -104,7 +104,7 @@ void ShardKV::SendRemoveShard(int shard, int config_num) {
   }
 
   if (status == std::future_status::timeout) {
-    Logger::Debug(kDTrace, me_, "RemoveShard: Timeout (2s) waiting for the result");
+    Logger::Debug(kDTrace, me_, "RemoveShard: Timeout (5s) waiting for the result");
     return;
   }
 

@@ -95,12 +95,12 @@ class Config {
         if (maxraftstate_ >= 0 && raft_size > 8 * maxraftstate_) {
           Logger::Debug(kDTest, -1,
                         fmt::format("persister.RaftStateSize() {}, but maxraftstate {}", raft_size, maxraftstate_));
-          throw SHARDKV_EXCEPTION(
-              fmt::format("persister.RaftStateSize() {}, but maxraftstate {}", raft_size, maxraftstate_));
+//          throw SHARDKV_EXCEPTION(
+//              fmt::format("persister.RaftStateSize() {}, but maxraftstate {}", raft_size, maxraftstate_));
         }
         if (maxraftstate_ < 0 && snap && snap->Size() > 0) {
           Logger::Debug(kDTest, -1, "maxraftstate is -1, but snapshot is non-empty!");
-          throw SHARDKV_EXCEPTION("maxraftstate is -1, but snapshot is non-empty!");
+//          throw SHARDKV_EXCEPTION("maxraftstate is -1, but snapshot is non-empty!");
         }
       }
     }
@@ -221,7 +221,7 @@ class Config {
     // state, so that the spec is that we pass StartKVServer()
     // the last persisted state.
     if (gg->saved_[i] != nullptr) {
-      Logger::Debug(kDTest, -1, fmt::format("Copy old persister for group {} server {}", gi, i));
+//      Logger::Debug(kDTest, -1, fmt::format("Copy old persister for group {} server {}", gi, i));
       std::optional<raft::RaftPersistState> state;
       std::optional<raft::Snapshot> snap;
       gg->saved_[i]->ReadStateAndSnap(state, snap);

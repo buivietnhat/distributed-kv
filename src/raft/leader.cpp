@@ -302,7 +302,7 @@ void Raft::RequestAppendEntries(const std::vector<int> &replica_list, int start_
   l.unlock();
 
   if (start_idx != lm_->GetStartIndex()) {
-    Logger::Debug(kDLeader, me_, "Give up sending logs to ALL replicas since just installed snapshot");
+    Logger::Debug(kDDrop, me_, "Give up sending logs to ALL replicas since just installed snapshot");
     return;
   }
 
@@ -343,8 +343,8 @@ void Raft::RequestAppendEntries(const std::vector<int> &replica_list, int start_
         lm_->Unlock();
 
         l.lock();
-        tentative_next_index_[server] = next_index_[server] + 1;
-        Logger::Debug(kDLeader, me_,
+        tentative_next_index_[server] = next_index_[server];
+        Logger::Debug(kDDrop, me_,
                       fmt::format("Give up sending Logs to server {} since the snapshot just been installed", server));
         l.unlock();
 
@@ -421,7 +421,11 @@ void Raft::RequestCommits(const std::vector<int> &server_list, int index, int st
   lm_->Lock();
   if (lm_->DoGetStartIndex() > index) {
     lm_->Unlock();
-    Logger::Debug(kDDrop, me_, "Gave up the commit request since I just installed a snapshot");
+    Logger::Debug(
+        kDDrop, me_,
+        fmt::format(
+            "Gave up the commit index {} request since I just installed a snapshot, old startidx {}, new startidx {}",
+            index, start_idx, lm_->DoGetStartIndex()));
     return;
   }
 

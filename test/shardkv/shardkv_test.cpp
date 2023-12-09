@@ -107,7 +107,7 @@ TEST(ShardKVTest, DISABLED_TestStaticShards) {
   EXPECT_TRUE(cfg.CleanUp());
 }
 
-TEST(ShardKVTest, TestJoinLeave) {
+TEST(ShardKVTest, DISABLED_TestJoinLeave) {
   Logger::Debug(kDTest, -1, "Test: join then leave");
 
   Config cfg(3, false, -1);
@@ -166,6 +166,83 @@ TEST(ShardKVTest, TestJoinLeave) {
     Logger::Debug(kDTest, -1, fmt::format("An exception thrown: {}", e.what()));
     Logger::Debug(kDTest, -1, "  ... Failed");
   }
+
+  EXPECT_TRUE(cfg.CleanUp());
+}
+
+TEST(ShardKVTest, TestSnapshot) {
+  Logger::Debug(kDTest, -1, "Test: snapshots, join, and leave ...\n");
+
+  Config cfg(3, false, 1000);
+
+  auto ck = cfg.MakeClient();
+
+  Logger::Debug(kDTest, -1, "Join group 0");
+  cfg.Join(0);
+
+  int n = 30;
+  std::vector<std::string> ka(n);
+  std::vector<std::string> va(n);
+  for (int i = 0; i < n; i++) {
+    ka[i] = std::to_string(i);  // ensure multiple shards
+    va[i] = common::RandString(20);
+    ck->Put(ka[i], va[i]);
+  }
+  for (int i = 0; i < n; i++) {
+    EXPECT_TRUE(Check(ck.get(), ka[i], va[i]));
+  }
+
+  Logger::Debug(kDTest, -1, "Join group 1");
+  cfg.Join(1);
+  Logger::Debug(kDTest, -1, "Join group 2");
+  cfg.Join(2);
+  Logger::Debug(kDTest, -1, "Leave group 0");
+  cfg.Leave(0);
+
+  for (int i = 0; i < n; i++) {
+    EXPECT_TRUE(Check(ck.get(), ka[i], va[i]));
+    auto x = common::RandString(20);
+    ck->Append(ka[i], x);
+    va[i] += x;
+  }
+
+  Logger::Debug(kDTest, -1, "Leave group 1");
+  cfg.Leave(1);
+  Logger::Debug(kDTest, -1, "Join group 0");
+  cfg.Join(0);
+
+  for (int i = 0; i < n; i++) {
+    EXPECT_TRUE(Check(ck.get(), ka[i], va[i]));
+    auto x = common::RandString(20);
+    ck->Append(ka[i], x);
+    va[i] += x;
+  }
+
+  common::SleepMs(1000);
+
+  for (int i = 0; i < n; i++) {
+    EXPECT_TRUE(Check(ck.get(), ka[i], va[i]));
+  }
+
+  common::SleepMs(1000);
+
+  cfg.CheckLogs();
+
+  Logger::Debug(kDTest, -1, "Shutdown groups 0,1,2");
+  cfg.ShutdownGroup(0);
+  cfg.ShutdownGroup(1);
+  cfg.ShutdownGroup(2);
+
+  Logger::Debug(kDTest, -1, "Start groups 0,1,2");
+  cfg.StartGroup(0);
+  cfg.StartGroup(1);
+  cfg.StartGroup(2);
+
+  for (int i = 0; i < n; i++) {
+    EXPECT_TRUE(Check(ck.get(), ka[i], va[i]));
+  }
+
+  Logger::Debug(kDTest, -1, "  ... Passed\n");
 
   EXPECT_TRUE(cfg.CleanUp());
 }

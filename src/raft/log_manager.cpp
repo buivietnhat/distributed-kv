@@ -123,7 +123,7 @@ void LogManager::CommitEntries(int start_idx, int from_idx, int to_idx) {
     return;
   }
 
-  auto entries = CopyLog(from_idx - start_idx_, to_idx - start_idx);
+  auto entries = CopyLog(from_idx - start_idx_, to_idx - start_idx_);
   l.unlock();
 
   for (int idx = from_idx; idx <= to_idx; idx++) {
@@ -144,7 +144,8 @@ void LogManager::CommitEntries(int start_idx, int from_idx, int to_idx) {
 // copy from from_idx to to_idx, inclusion
 std::vector<LogEntry> LogManager::CopyLog(int from_idx, int to_idx) const {
   if (from_idx < 0 || to_idx >= static_cast<int>(log_.size()) || from_idx > to_idx) {
-    throw LOG_MANAGER_EXCEPTION("invalid copy argument");
+    throw LOG_MANAGER_EXCEPTION(
+        fmt::format("invalid copy argument fromidx = {}, toidx = {}, logsize = {}", from_idx, to_idx, log_.size()));
   }
   std::vector<LogEntry> copy;
   copy.reserve(to_idx - from_idx + 1);

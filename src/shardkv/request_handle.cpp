@@ -155,6 +155,9 @@ GetReply ShardKV::Get(const GetArgs &args) {
 
   // start a new operation to Raft
   auto [index, _, is_leader] = rf_->Start(op);
+  Logger::Debug1(kDLeader1, me_, gid_,
+                 fmt::format("Start new cmd index {} for Get client {} seq {} for key {} val ", index,
+                             args.uuid_ % 10000, args.seq_number_, args.key_));
   if (!is_leader) {
     Logger::Debug1(kDDrop, gid_, me_, "I am not a leader, return ...");
     reply.err_ = Err::ERR_WRONG_LEADER;
@@ -169,13 +172,13 @@ GetReply ShardKV::Get(const GetArgs &args) {
   auto status = fut.wait_for(2s);
 
   if (Killed()) {
-    Logger::Debug(kDTrace, me_, "Get: return while waiting for the result");
+    Logger::Debug1(kDTrace, me_, gid_, "Get: return while waiting for the result");
     reply.err_ = Err::ERR_WRONG_LEADER;
     return reply;
   }
 
   if (status == std::future_status::timeout) {
-    Logger::Debug(kDTrace, me_, "Get: Timeout (2s) waiting for the result");
+    Logger::Debug1(kDTrace, me_, gid_, "Get: Timeout (2s) waiting for the result");
     reply.err_ = Err::ERR_WRONG_LEADER;
     return reply;
   }
@@ -234,6 +237,9 @@ PutAppendReply ShardKV::PutAppend(const PutAppendArgs &args) {
 
   // start a new operation to Raft
   auto [index, _, is_leader] = rf_->Start(op);
+  Logger::Debug1(kDLeader1, me_, gid_,
+                 fmt::format("Start new cmd index {} for {} client {} seq {} for key {} val {}", index,
+                             ToString(args.op_), args.uuid_ % 10000, args.seq_number_, args.key_, args.value_));
   if (!is_leader) {
     Logger::Debug1(kDDrop, gid_, me_, "I am not a leader, return ...");
     reply.err_ = Err::ERR_WRONG_LEADER;
@@ -248,13 +254,13 @@ PutAppendReply ShardKV::PutAppend(const PutAppendArgs &args) {
   auto status = fut.wait_for(2s);
 
   if (Killed()) {
-    Logger::Debug(kDTrace, me_, "Put/Append: return while waiting for the result");
+    Logger::Debug1(kDTrace, me_, gid_, "Put/Append: return while waiting for the result");
     reply.err_ = Err::ERR_WRONG_LEADER;
     return reply;
   }
 
   if (status == std::future_status::timeout) {
-    Logger::Debug(kDTrace, me_, "Put/Append: Timeout (2s) waiting for the result");
+    Logger::Debug1(kDTrace, me_, gid_, "Put/Append: Timeout (2s) waiting for the result");
     reply.err_ = Err::ERR_WRONG_LEADER;
     return reply;
   }
@@ -327,13 +333,13 @@ InstallShardReply ShardKV::InstallShard(const InstallShardArgs &args) {
   auto status = fut.wait_for(2s);
 
   if (Killed()) {
-    Logger::Debug(kDTrace, me_, "InstallShard: return while waiting for the result");
+    Logger::Debug1(kDTrace, me_, gid_, "InstallShard: return while waiting for the result");
     reply.err_ = Err::ERR_WRONG_LEADER;
     return reply;
   }
 
   if (status == std::future_status::timeout) {
-    Logger::Debug(kDTrace, me_, "InstallShard: Timeout (2s) waiting for the result");
+    Logger::Debug1(kDTrace, me_, gid_, "InstallShard: Timeout (2s) waiting for the result");
     reply.err_ = Err::ERR_WRONG_LEADER;
     return reply;
   }

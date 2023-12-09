@@ -23,6 +23,7 @@ kv::shardkv::ShardKV::ShardKV(std::vector<network::ClientEnd *> servers, int me,
   // restore any snapshoted state
   auto snapshot = rf_->ReadSnapshot();
   if (snapshot) {
+    Logger::Debug1(kDServ, me_, gid_, "Restore state from previous snapshot");
     InstallSnapshot(*snapshot);
   }
 
@@ -95,12 +96,11 @@ void ShardKV::InstallRaftAppliedMsg(const raft::ApplyMsg &m) {
           fmt::format("Raft applies out of order, lastApplied {}, cmdIndex {}", last_applied_, m.command_index_));
     }
 
-    Logger::Debug1(kDTrck, me_, gid_, fmt::format("New index {} applied", m.command_index_));
-
     try {
       auto cmd = std::any_cast<Op>(m.command_);
       InstallCmdMsg(cmd, m.command_index_);
       SetLastApplied(m.command_index_);
+      Logger::Debug1(kDTrck, me_, gid_, fmt::format("New index {} applied", m.command_index_));
     } catch (const std::bad_any_cast &e) {
       Logger::Debug(kDError, me_, "Exception throw trying to cast the cmd msg");
     }
@@ -260,7 +260,7 @@ void ShardKV::InstallSnapshot(const raft::Snapshot &snapshot) {
   lot_.table_ = lot;
   last_applied_ = last_applied;
 
-  InstallNewConfig(cfg);
+  InstallNewConfigUnlocked(cfg);
   shards_installed_ = shards_installed;
   shards_removed_ = shards_removed;
   Logger::Debug1(kDServ, me_, gid_, fmt::format("Restored Shards Removed to {}", common::ToString(shards_removed_)));
@@ -282,6 +282,8 @@ void ShardKV::ObserverRaftState(int maxraftstate) {
   while (!Killed()) {
     auto sz = rf_->RaftStateSize();
     if (sz >= maxraftstate) {
+      //      Logger::Debug1(kDSnp1, me_, gid_, fmt::format("Raft state is now {} >= maxraftstate({})", sz,
+      //      maxraftstate));
       auto [snapshot, last_applied] = CaptureCurrentState();
       Logger::Debug1(kDSnp1, me_, gid_, fmt::format("Ask Raft to install Snapshot upto index {}", last_applied));
       rf_->DoSnapshot(last_applied, snapshot);
