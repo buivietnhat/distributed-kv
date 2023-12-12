@@ -215,10 +215,10 @@ class Config {
 
     l.unlock();
 
-    servers_[i] = std::make_unique<ShardCtrler>(std::move(ends), i, saved_[i]);
+    servers_[i] = std::make_shared<ShardCtrler>(std::move(ends), i, saved_[i]);
 
     auto server = std::make_unique<network::Server>();
-    server->AddShardCtrler(servers_[i].get());
+    server->AddShardCtrler(servers_[i]);
     server->AddRaft(servers_[i]->Raft());
     net_->AddServer(std::to_string(i), std::move(server));
   }
@@ -310,7 +310,7 @@ class Config {
   std::unique_ptr<network::Network> net_;
   bool finished_{false};
   int n_;
-  std::vector<std::unique_ptr<ShardCtrler>> servers_;
+  std::vector<std::shared_ptr<ShardCtrler>> servers_;
   std::vector<std::shared_ptr<storage::PersistentInterface>> saved_;
   std::vector<std::vector<std::string>> endnames_;  // names of each server's sending ClientEnds
   std::unordered_map<std::shared_ptr<Clerk>, std::vector<std::string>> clerks_;

@@ -67,8 +67,8 @@ struct Server {
 
   std::mutex mu_;
   raft::Raft *raft_;
-  shardctrler::ShardCtrler *shardctrler_;
-  shardkv::ShardKV *shardkv_;
+  std::shared_ptr<shardctrler::ShardCtrler> shardctrler_;
+  std::shared_ptr<shardkv::ShardKV> shardkv_;
 
   int count_{0};  // incoming RPCs
 
@@ -77,12 +77,12 @@ struct Server {
     raft_ = raft;
   }
 
-  void AddShardCtrler(shardctrler::ShardCtrler *shardctrler) {
+  void AddShardCtrler(std::shared_ptr<shardctrler::ShardCtrler> shardctrler) {
     std::lock_guard lock(mu_);
     shardctrler_ = shardctrler;
   }
 
-  void AddShardKV(shardkv::ShardKV *shardkv) {
+  void AddShardKV(std::shared_ptr<shardkv::ShardKV> shardkv) {
     std::lock_guard lock(mu_);
     shardkv_ = shardkv;
   }
@@ -187,71 +187,10 @@ struct Server {
     Server *srv_;
   };
 
-  // TODO(nhat): refactor this to use std::visit, alot of duplicated code, and it's quite ugly
   ReplyMessage DispatchReq(const RequestMessage &req) {
     count_ += 1;
 
     return std::visit(RequestDispatcher{this}, req.args_);
-    //    switch (req.method_) {
-    //      case REQUEST_VOTE: {
-    //        if (raft_ == nullptr) {
-    //          throw std::runtime_error("unknown raft service, expecting one");
-    //        }
-    //        auto rep = raft_->RequestVote(std::get<raft::RequestVoteArgs>(req.args_));
-    //        return {true, std::move(rep)};
-    //      }
-    //      case APPEND_ENTRIES: {
-    //        if (raft_ == nullptr) {
-    //          throw std::runtime_error("unknown raft service, expecting one");
-    //        }
-    //        auto rep = raft_->AppendEntries(std::get<raft::AppendEntryArgs>(req.args_));
-    //        return {true, std::move(rep)};
-    //      }
-    //      case INSTALL_SNAPSHOT: {
-    //        if (raft_ == nullptr) {
-    //          throw std::runtime_error("unknown raft service, expecting one");
-    //        }
-    //        auto rep = raft_->InstallSnapshot(std::get<raft::InstallSnapshotArgs>(req.args_));
-    //        return {true, std::move(rep)};
-    //      }
-    //      case QUERY: {
-    //        if (shardctrler_ == nullptr) {
-    //          throw std::runtime_error("unknown shardctrler service, expecting one");
-    //        }
-    //        auto rep = shardctrler_->Query(std::get<shardctrler::QueryArgs>(req.args_));
-    //        return {true, std::move(rep)};
-    //      }
-    //      case JOIN: {
-    //        if (shardctrler_ == nullptr) {
-    //          throw std::runtime_error("unknown shardctrler service, expecting one");
-    //        }
-    //        auto rep = shardctrler_->Join(std::get<shardctrler::JoinArgs>(req.args_));
-    //        return {true, std::move(rep)};
-    //      }
-    //      case LEAVE: {
-    //        if (shardctrler_ == nullptr) {
-    //          throw std::runtime_error("unknown shardctrler service, expecting one");
-    //        }
-    //        auto rep = shardctrler_->Leave(std::get<shardctrler::LeaveArgs>(req.args_));
-    //        return {true, std::move(rep)};
-    //      }
-    //      case MOVE: {
-    //        if (shardctrler_ == nullptr) {
-    //          throw std::runtime_error("unknown shardctrler service, expecting one");
-    //        }
-    //        auto rep = shardctrler_->Move(std::get<shardctrler::MoveArgs>(req.args_));
-    //        return {true, std::move(rep)};
-    //      }
-    //      case TEST: {
-    //        if (raft_ == nullptr) {
-    //          throw std::runtime_error("unknown raft service, expecting one");
-    //        }
-    //        auto rep = raft_->Test(std::get<int>(req.args_));
-    //        return {true, std::move(rep)};
-    //      }
-    //      default:
-    //        return {};
-    //    }
   }
 };
 
@@ -570,7 +509,7 @@ class Network {
       auto reply_ok = std::make_shared<bool>(false);
       auto is_server_dead = std::make_shared<bool>(false);
 
-      auto fut1 = std::async(std::launch::async, [&, reply_ok] {
+      auto fut1 = std::async(std::launch::async, [&, reply_ok, server = server] {
         reply = server->DispatchReq(req);
         std::lock_guard l(m);
         *reply_ok = true;

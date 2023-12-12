@@ -224,7 +224,9 @@ std::pair<raft::Snapshot, int> ShardKV::CaptureCurrentState() {
   json_snap["lot"] = lot_.table_;
   auto last_applied = last_applied_;
   json_snap["last_applied"] = last_applied_;
-  json_snap["cfg"] = *config_;
+  if (config_ != nullptr) {
+    json_snap["cfg"] = *config_;
+  }
   json_snap["shard_installed"] = shards_installed_;
   json_snap["shard_removed"] = shards_removed_;
 
@@ -248,7 +250,10 @@ void ShardKV::InstallSnapshot(const raft::Snapshot &snapshot) {
   auto db = json_snap["db"].get<std::unordered_map<int, std::unordered_map<std::string, std::string>>>();
   auto lot = json_snap["lot"].get<std::unordered_map<int, std::unordered_map<uint64_t, LastOp>>>();
   auto last_applied = json_snap["last_applied"].get<int>();
-  auto cfg = json_snap["cfg"].get<shardctrler::ShardConfig>();
+  std::optional<shardctrler::ShardConfig> cfg;
+  if (json_snap.contains("cfg")) {
+    cfg = json_snap["cfg"].get<shardctrler::ShardConfig>();
+  }
   auto shards_installed = json_snap["shard_installed"].get<std::unordered_set<int>>();
   auto shards_removed = json_snap["shard_removed"].get<std::unordered_set<int>>();
 
@@ -260,7 +265,10 @@ void ShardKV::InstallSnapshot(const raft::Snapshot &snapshot) {
   lot_.table_ = lot;
   last_applied_ = last_applied;
 
-  InstallNewConfigUnlocked(cfg);
+  if (cfg) {
+    InstallNewConfigUnlocked(*cfg);
+  }
+
   shards_installed_ = shards_installed;
   shards_removed_ = shards_removed;
   Logger::Debug1(kDServ, me_, gid_, fmt::format("Restored Shards Removed to {}", common::ToString(shards_removed_)));

@@ -95,12 +95,12 @@ class Config {
         if (maxraftstate_ >= 0 && raft_size > 8 * maxraftstate_) {
           Logger::Debug(kDTest, -1,
                         fmt::format("persister.RaftStateSize() {}, but maxraftstate {}", raft_size, maxraftstate_));
-//          throw SHARDKV_EXCEPTION(
-//              fmt::format("persister.RaftStateSize() {}, but maxraftstate {}", raft_size, maxraftstate_));
+          //          throw SHARDKV_EXCEPTION(
+          //              fmt::format("persister.RaftStateSize() {}, but maxraftstate {}", raft_size, maxraftstate_));
         }
         if (maxraftstate_ < 0 && snap && snap->Size() > 0) {
           Logger::Debug(kDTest, -1, "maxraftstate is -1, but snapshot is non-empty!");
-//          throw SHARDKV_EXCEPTION("maxraftstate is -1, but snapshot is non-empty!");
+          //          throw SHARDKV_EXCEPTION("maxraftstate is -1, but snapshot is non-empty!");
         }
       }
     }
@@ -113,7 +113,7 @@ class Config {
   }
 
   void ShutdownServer(int gi, int i) {
-//    Logger::Debug(kDTest, -1, fmt::format("Shut down server {} of Group {}", i, gi));
+    //    Logger::Debug(kDTest, -1, fmt::format("Shut down server {} of Group {}", i, gi));
     std::unique_lock lock(mu_);
 
     auto gg = groups_[gi].get();
@@ -157,7 +157,7 @@ class Config {
   }
 
   void ShutdownGroup(int gi) {
-//    Logger::Debug(kDTest, -1, fmt::format("Shutdown group {}", gi));
+    //    Logger::Debug(kDTest, -1, fmt::format("Shutdown group {}", gi));
     for (int i = 0; i < n_; i++) {
       ShutdownServer(gi, i);
     }
@@ -221,13 +221,13 @@ class Config {
     // state, so that the spec is that we pass StartKVServer()
     // the last persisted state.
     if (gg->saved_[i] != nullptr) {
-//      Logger::Debug(kDTest, -1, fmt::format("Copy old persister for group {} server {}", gi, i));
+      //      Logger::Debug(kDTest, -1, fmt::format("Copy old persister for group {} server {}", gi, i));
       std::optional<raft::RaftPersistState> state;
       std::optional<raft::Snapshot> snap;
       gg->saved_[i]->ReadStateAndSnap(state, snap);
       gg->saved_[i] = std::make_shared<storage::MockingPersister>(std::move(state), std::move(snap));
     } else {
-//      Logger::Debug(kDTest, -1, fmt::format("Start with fresh persister for group {} server {}", gi, i));
+      //      Logger::Debug(kDTest, -1, fmt::format("Start with fresh persister for group {} server {}", gi, i));
       gg->saved_[i] = std::make_shared<storage::MockingPersister>();
     }
     lock.unlock();
@@ -243,7 +243,7 @@ class Config {
 
     auto server = std::make_unique<network::Server>();
     server->AddRaft(gg->servers_[i]->GetRaft());
-    server->AddShardKV(gg->servers_[i].get());
+    server->AddShardKV(gg->servers_[i]);
     net_->AddServer(ServerName(gg->gid_, i), std::move(server));
   }
 
@@ -268,7 +268,7 @@ class Config {
 
     auto server = std::make_unique<network::Server>();
     server->AddRaft(ctrlerservers_[i]->Raft());
-    server->AddShardCtrler(ctrlerservers_[i].get());
+    server->AddShardCtrler(ctrlerservers_[i]);
     net_->AddServer(CtrlerName(i), std::move(server));
   }
 

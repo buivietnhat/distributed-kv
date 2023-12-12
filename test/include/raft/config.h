@@ -596,7 +596,7 @@ class Config {
   std::vector<bool> apply_finished_;
   int num_servers_;
   std::unique_ptr<network::Network> net_;
-  std::vector<std::unique_ptr<Raft>> rafts_;
+  std::vector<std::shared_ptr<Raft>> rafts_;
   std::vector<bool> connected_;
   std::vector<std::vector<std::string>> endnames_;
   std::vector<std::unordered_map<int, std::any>> logs_;

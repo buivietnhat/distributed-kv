@@ -24,7 +24,7 @@ void Raft::DoSnapshot(int index, const Snapshot &snapshot) {
   auto last_log_idx = lm_->DoGetLastLogIdx();
   if (index > cmit_idx || index > last_log_idx) {
     Logger::Debug(
-        kDTrace, me_,
+        kDSnap, me_,
         fmt::format("Drop the install snapshot request since I haven't commited up to index {} yet ({}) lastLogIdx {}",
                     index, cmit_idx, last_log_idx));
     return;
@@ -65,7 +65,7 @@ InstallSnapshotReply Raft::InstallSnapshot(const InstallSnapshotArgs &args) {
 
   auto last_included_index = lm_->GetLastIncludedIndex();
   if (args.last_included_index_ <= last_included_index) {
-    Logger::Debug(kDDrop, me_,
+    Logger::Debug(kDSnap, me_,
                   fmt::format("Drop the Install Snapshot for index {} since my lastIncludedIndex {}",
                               args.last_included_index_, last_included_index));
     return reply;
@@ -73,7 +73,7 @@ InstallSnapshotReply Raft::InstallSnapshot(const InstallSnapshotArgs &args) {
 
   auto ten_commit_idx = lm_->GetTentativeCommitIndex();
   if (args.last_included_index_ < ten_commit_idx) {
-    Logger::Debug(kDDrop, me_,
+    Logger::Debug(kDSnap, me_,
                   fmt::format("Drop Snapshot: The lastIncludedIdx {} is less than my current tentativeCmitIdx {}",
                               args.last_included_index_, ten_commit_idx));
     return reply;

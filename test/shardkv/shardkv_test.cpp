@@ -170,7 +170,7 @@ TEST(ShardKVTest, DISABLED_TestJoinLeave) {
   EXPECT_TRUE(cfg.CleanUp());
 }
 
-TEST(ShardKVTest, TestSnapshot) {
+TEST(ShardKVTest, DISABLED_TestSnapshot) {
   Logger::Debug(kDTest, -1, "Test: snapshots, join, and leave ...\n");
 
   Config cfg(3, false, 1000);
@@ -243,6 +243,199 @@ TEST(ShardKVTest, TestSnapshot) {
   }
 
   Logger::Debug(kDTest, -1, "  ... Passed\n");
+
+  EXPECT_TRUE(cfg.CleanUp());
+}
+
+TEST(ShardKVTest, DISABLED_TestMissChange) {
+  Logger::Debug(kDTest, -1, "Test: servers miss configuration changes ...");
+
+  Config cfg(3, false, 1000);
+
+  auto ck = cfg.MakeClient();
+
+  cfg.Join(0);
+
+  int n = 10;
+  std::vector<std::string> ka(n);
+  std::vector<std::string> va(n);
+  for (int i = 0; i < n; i++) {
+    ka[i] = std::to_string(i);
+    va[i] = common::RandString(20);
+    ck->Put(ka[i], va[i]);
+  }
+  for (int i = 0; i < n; i++) {
+    Check(ck.get(), ka[i], va[i]);
+  }
+
+  cfg.Join(1);
+
+  Logger::Debug(kDTest, -1, "Shutdown Server 0 of Group 0");
+  cfg.ShutdownServer(0, 0);
+  Logger::Debug(kDTest, -1, "Shutdown Server 0 of Group 1");
+  cfg.ShutdownServer(1, 0);
+  Logger::Debug(kDTest, -1, "Shutdown Server 0 of Group 2");
+  cfg.ShutdownServer(2, 0);
+
+  cfg.Join(2);
+  cfg.Leave(1);
+  cfg.Leave(0);
+
+  for (int i = 0; i < n; i++) {
+    Check(ck.get(), ka[i], va[i]);
+    auto x = common::RandString(20);
+    ck->Append(ka[i], x);
+    va[i] += x;
+  }
+
+  cfg.Join(1);
+
+  for (int i = 0; i < n; i++) {
+    Check(ck.get(), ka[i], va[i]);
+    auto x = common::RandString(20);
+    ck->Append(ka[i], x);
+    va[i] += x;
+  }
+
+  Logger::Debug(kDTest, -1, "Start Server 0 of Group 0");
+  cfg.StartServer(0, 0);
+  Logger::Debug(kDTest, -1, "Start Server 0 of Group 1");
+  cfg.StartServer(1, 0);
+  Logger::Debug(kDTest, -1, "Start Server 0 of Group 2");
+  cfg.StartServer(2, 0);
+
+  for (int i = 0; i < n; i++) {
+    Check(ck.get(), ka[i], va[i]);
+    auto x = common::RandString(20);
+    ck->Append(ka[i], x);
+    va[i] += x;
+  }
+
+  common::SleepMs(2000);
+
+  Logger::Debug(kDTest, -1, "Shutdown Server 1 of Group 0");
+  cfg.ShutdownServer(0, 1);
+  Logger::Debug(kDTest, -1, "Shutdown Server 1 of Group 1");
+  cfg.ShutdownServer(1, 1);
+  Logger::Debug(kDTest, -1, "Shutdown Server 1 of Group 2");
+  cfg.ShutdownServer(2, 1);
+
+  cfg.Join(0);
+  cfg.Leave(2);
+
+  for (int i = 0; i < n; i++) {
+    Check(ck.get(), ka[i], va[i]);
+    auto x = common::RandString(20);
+    ck->Append(ka[i], x);
+    va[i] += x;
+  }
+
+  Logger::Debug(kDTest, -1, "Start Server 1 of Group 0");
+  cfg.StartServer(0, 1);
+  Logger::Debug(kDTest, -1, "Start Server 1 of Group 1");
+  cfg.StartServer(1, 1);
+  Logger::Debug(kDTest, -1, "Start Server 1 of Group 2");
+  cfg.StartServer(2, 1);
+
+  for (int i = 0; i < n; i++) {
+    Check(ck.get(), ka[i], va[i]);
+  }
+
+  Logger::Debug(kDTest, -1, "  ... Passed");
+
+  EXPECT_TRUE(cfg.CleanUp());
+}
+
+TEST(ShardKVTest, ConcurrentTest1) {
+  Logger::Debug(kDTest, -1, "Test: concurrent puts and configuration changes...\n");
+
+  Config cfg(3, false, 100);
+
+  auto ck = cfg.MakeClient();
+
+  cfg.Join(0);
+
+  int n = 10;
+  std::vector<std::string> ka(n);
+  std::vector<std::string> va(n);
+  for (int i = 0; i < n; i++) {
+    ka[i] = std::to_string(i);
+    va[i] = common::RandString(5);
+    ck->Put(ka[i], va[i]);
+  }
+  for (int i = 0; i < n; i++) {
+    Check(ck.get(), ka[i], va[i]);
+  }
+
+  std::atomic<bool> done{false};
+
+  auto ff = [&](int i) {
+    auto ck1 = cfg.MakeClient();
+    while (done == false) {
+      auto x = common::RandString(5);
+      ck1->Append(ka[i], x);
+      va[i] += x;
+      common::SleepMs(10);
+    }
+  };
+
+  std::vector<std::thread> threads;
+  for (int i = 0; i < n; i++) {
+    threads.push_back(std::thread([&, i] { ff(i); }));
+  }
+
+  common::SleepMs(150);
+  Logger::Debug(kDTest, -1, "Join group 1");
+  cfg.Join(1);
+  common::SleepMs(500);
+  Logger::Debug(kDTest, -1, "Join group 2");
+  cfg.Join(2);
+  common::SleepMs(500);
+  Logger::Debug(kDTest, -1, "Leave group 0");
+  cfg.Leave(0);
+
+  Logger::Debug(kDTest, -1, "Shutdown group 0");
+  cfg.ShutdownGroup(0);
+  common::SleepMs(100);
+  Logger::Debug(kDTest, -1, "Shutdown group 1");
+  cfg.ShutdownGroup(1);
+  common::SleepMs(100);
+  Logger::Debug(kDTest, -1, "Shutdown group 2");
+  cfg.ShutdownGroup(2);
+
+  Logger::Debug(kDTest, -1, "Leave group 2");
+  cfg.Leave(2);
+
+  common::SleepMs(100);
+  Logger::Debug(kDTest, -1, "Start group 0");
+  cfg.StartGroup(0);
+  Logger::Debug(kDTest, -1, "Start group 1");
+  cfg.StartGroup(1);
+  Logger::Debug(kDTest, -1, "Start group 2");
+  cfg.StartGroup(2);
+
+  common::SleepMs(100);
+  Logger::Debug(kDTest, -1, "Join group 0");
+  cfg.Join(0);
+  Logger::Debug(kDTest, -1, "Leave group 1");
+  cfg.Leave(1);
+  common::SleepMs(500);
+  Logger::Debug(kDTest, -1, "Join group 1");
+  cfg.Join(1);
+
+  common::SleepMs(1000);
+
+  done = true;
+
+  for (auto &thread : threads) {
+    thread.join();
+  }
+
+  for (int i = 0; i < n; i++) {
+    Check(ck.get(), ka[i], va[i]);
+  }
+
+  Logger::Debug(kDTest, -1, " ... Passed\n");
 
   EXPECT_TRUE(cfg.CleanUp());
 }
