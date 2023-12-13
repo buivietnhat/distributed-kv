@@ -346,7 +346,7 @@ TEST(ShardKVTest, DISABLED_TestMissChange) {
   EXPECT_TRUE(cfg.CleanUp());
 }
 
-TEST(ShardKVTest, ConcurrentTest1) {
+TEST(ShardKVTest, ConcurrentTest) {
   Logger::Debug(kDTest, -1, "Test: concurrent puts and configuration changes...\n");
 
   Config cfg(3, false, 100);
@@ -438,6 +438,56 @@ TEST(ShardKVTest, ConcurrentTest1) {
   Logger::Debug(kDTest, -1, " ... Passed\n");
 
   EXPECT_TRUE(cfg.CleanUp());
+}
+
+TEST(ShardKVTest, DISABLED_Unreliable) {
+  Logger::Debug(kDTest, -1, "Test: unreliable");
+
+  Config cfg(3, true, 100);
+  ON_SCOPE_EXIT { cfg.CleanUp(); };
+
+  auto ck = cfg.MakeClient();
+
+  cfg.Join(0);
+
+  int n = 10;
+  std::vector<std::string> ka(n);
+  std::vector<std::string> va(n);
+  for (int i = 0; i < n; i++) {
+    ka[i] = std::to_string(i);
+    va[i] = common::RandString(5);
+    ck->Put(ka[i], va[i]);
+  }
+  for (int i = 0; i < n; i++) {
+    Check(ck.get(), ka[i], va[i]);
+  }
+
+  Logger::Debug(kDTest, -1, "Join group 1");
+  cfg.Join(1);
+  Logger::Debug(kDTest, -1, "Join group 2");
+  cfg.Join(2);
+  Logger::Debug(kDTest, -1, "Leave group 0");
+  cfg.Leave(0);
+
+  for (int ii = 0; ii < n * 2; ii++) {
+    auto i = ii % n;
+    Check(ck.get(), ka[i], va[i]);
+    auto x = common::RandString(5);
+    ck->Append(ka[i], x);
+    va[i] += x;
+  }
+
+  Logger::Debug(kDTest, -1, "Join group 0");
+  cfg.Join(0);
+  Logger::Debug(kDTest, -1, "Leave group 1");
+  cfg.Leave(1);
+
+  for (int ii = 0; ii < n * 2; ii++) {
+    auto i = ii % n;
+    Check(ck.get(), ka[i], va[i]);
+  }
+
+  Logger::Debug(kDTest, -1, "  ... Passed\n");
 }
 
 }  // namespace kv::shardkv

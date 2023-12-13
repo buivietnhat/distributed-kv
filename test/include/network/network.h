@@ -33,18 +33,6 @@ using ReplyArgs =
                  shardctrler::JoinReply, shardctrler::LeaveReply, shardctrler::MoveReply, shardctrler::QueryReply,
                  shardkv::PutAppendReply, shardkv::GetReply, shardkv::InstallShardReply>;
 
-// enum class Method : uint8_t {
-//   RESERVERD,
-//   TEST,
-//   REQUEST_VOTE,
-//   APPEND_ENTRIES,
-//   INSTALL_SNAPSHOT,
-//   QUERY,
-//   JOIN,
-//   LEAVE,
-//   MOVE
-// };
-
 struct ReplyMessage {
   bool ok_{false};
   ReplyArgs args_;
@@ -52,7 +40,6 @@ struct ReplyMessage {
 
 struct RequestMessage {
   std::string endname_;
-  //  Method method_;
   RequestArgs args_;
   common::Channel<ReplyMessage> *chan_;
 
@@ -63,8 +50,6 @@ struct RequestMessage {
 };
 
 struct Server {
-  //  using enum Method;
-
   std::mutex mu_;
   raft::Raft *raft_;
   std::shared_ptr<shardctrler::ShardCtrler> shardctrler_;
@@ -392,8 +377,6 @@ class MockingClientEnd : public ClientEnd {
   void Terminate() override { finished_ = true; }
 
  private:
-  //  using enum Method;
-
   std::string endname_;
   common::Channel<RequestMessage> &chan_;
   bool finished_{false};
@@ -472,7 +455,7 @@ class Network {
       if (req.chan_ == nullptr) {
         continue;
       }
-      std::thread([&, req = std::move(req)] { ProcessRequest(std::move(req)); }).detach();
+      tr_.RegisterNewThread([&, req = std::move(req)] { ProcessRequest(std::move(req)); });
     }
   }
 
@@ -592,6 +575,7 @@ class Network {
   common::Channel<RequestMessage> chan_;
   std::thread dp_thread_;
   bool finished_{false};
+  common::ThreadRegistry tr_;
 };
 
 }  // namespace kv::network
