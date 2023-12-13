@@ -1,12 +1,12 @@
 
 #include "gtest/gtest.h"
-#include "raft/configuration.h"
+#include "raft/config.h"
 
 namespace kv::raft {
 
 TEST(RaftVoteTest, InitializeEletection) {
   int servers = 3;
-  Configuration<int> cfg{servers, false, false};
+  Config<int> cfg{servers, false, false};
 
   cfg.Begin("Test: initial election");
 
@@ -37,7 +37,7 @@ TEST(RaftVoteTest, InitializeEletection) {
 
 TEST(RaftVoteTest, ReElection) {
   int servers = 3;
-  Configuration<int> cfg{servers, false, false};
+  Config<int> cfg{servers, false, false};
 
   cfg.Begin("Test: election after network failure");
 
@@ -71,12 +71,12 @@ TEST(RaftVoteTest, ReElection) {
   EXPECT_TRUE(cfg.CheckNoLeader());
 
   // if a quorum arises, it should elect a leader.
-  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", (leader2 + 1) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Connect with ShardKV {}", (leader2 + 1) % servers));
   cfg.Connect((leader2 + 1) % servers);
   EXPECT_NE(-1, cfg.CheckOneLeader());
 
   // re-join of last node shouldn't prevent leader from existing
-  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", leader2));
+  Logger::Debug(kDTest, -1, fmt::format("Connect with ShardKV {}", leader2));
   cfg.Connect(leader2);
   EXPECT_NE(-1, cfg.CheckOneLeader());
 
@@ -85,7 +85,7 @@ TEST(RaftVoteTest, ReElection) {
 
 TEST(RaftVoteTest, ManyElections) {
   int servers = 7;
-  Configuration<int> cfg{servers, false, false};
+  Config<int> cfg{servers, false, false};
 
   cfg.Begin("Test: multiple elections");
 

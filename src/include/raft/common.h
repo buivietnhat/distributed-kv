@@ -3,6 +3,8 @@
 #include <any>
 #include <string>
 #include <vector>
+
+#include "common/container/concurrent_blocking_queue.h"
 #include "common/logger.h"
 
 namespace kv::raft {
@@ -23,7 +25,12 @@ struct RaftPersistState {
   std::vector<LogEntry> logs_;
 
   size_t Size() const {
-    return 4 * 5 + logs_.size();
+    // the first entry is just a fake one
+    if (logs_.size() <= 1) {
+      return 0;
+    }
+
+    return logs_.size() - 1;
   }
 };
 
@@ -125,5 +132,7 @@ inline std::string ToString(Role role) {
       return "";
   }
 }
+
+using apply_ch_t = std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>>;
 
 }  // namespace kv::raft

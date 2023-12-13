@@ -2,9 +2,11 @@
 
 #include <condition_variable>
 #include <mutex>
+#include <optional>
 
 #include "common/container/concurrent_blocking_queue.h"
 #include "common/macros.h"
+#include "common/util.h"
 
 namespace kv::common {
 
@@ -15,24 +17,40 @@ class Channel {
 
   DISALLOW_COPY_AND_MOVE(Channel);
 
-  T Receive() { return DoReceive(); }
+  T Receive(std::optional<int> timeout = {}) { return DoReceive(timeout); }
 
-  void Send(T val) { return DoSend(val); }
+  void Send(T val, std::optional<int> timeout = {}) { return DoSend(val, timeout); }
 
   void Close() { return DoClose(); }
 
+  bool IsClose() const { return closed_; }
+
+  bool HasReceiver() const {
+    std::lock_guard l(mu_);
+    return has_receiver_;
+  }
+
  private:
-  T DoReceive() {
+  T DoReceive(std::optional<int> timeout) {
     if (closed_) {
       return {};
     }
 
     std::unique_lock l(mu_);
     has_receiver_ = true;
+    bool ok = true;
     cond_.notify_all();
-    cond_.wait(l, [&] { return (has_receiver_ && has_value_) || closed_; });
+    if (!timeout) {
+      cond_.wait(l, [&] { return (has_receiver_ && has_value_) || closed_; });
+    } else {
+      ok = cond_.wait_for(l, MS(*timeout), [&] { return (has_receiver_ && has_value_) || closed_; });
+    }
 
     if (closed_) {
+      return {};
+    }
+
+    if (!ok) {
       return {};
     }
 
@@ -41,15 +59,24 @@ class Channel {
     return val_;
   }
 
-  void DoSend(T val) {
+  void DoSend(T val, std::optional<int> timeout) {
     if (closed_) {
       return;
     }
 
+    bool ok = true;
     std::unique_lock l(mu_);
-    cond_.wait(l, [&] { return (has_receiver_ && !has_value_) || closed_; });
+    if (!timeout) {
+      cond_.wait(l, [&] { return (has_receiver_ && !has_value_) || closed_; });
+    } else {
+      ok = cond_.wait_for(l, MS(*timeout), [&] { return (has_receiver_ && !has_value_) || closed_; });
+    }
 
     if (closed_) {
+      return;
+    }
+
+    if (!ok) {
       return;
     }
 
@@ -66,11 +93,9 @@ class Channel {
   T val_;
   bool has_value_{false};
   bool has_receiver_{false};
-  std::mutex mu_;
+  mutable std::mutex mu_;
   std::condition_variable cond_;
-  bool closed_{false};
-
-  //  ConcurrentBlockingQueue<T> queue_;
+  std::atomic<bool> closed_{false};
 };
 
 }  // namespace kv::common

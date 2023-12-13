@@ -16,6 +16,7 @@ class MockingPersister : public PersistentInterface {
   MockingPersister(const MockingPersister &other) {
     std::lock_guard lock(mu_);
     state_ = other.state_;
+    snapshot_ = other.snapshot_;
   }
 
   void SaveRaftState(const raft::RaftPersistState &state) override {
@@ -38,6 +39,13 @@ class MockingPersister : public PersistentInterface {
     return snapshot_;
   }
 
+  void ReadStateAndSnap(std::optional<raft::RaftPersistState> &state,
+                        std::optional<raft::Snapshot> &snapshot) const override {
+    std::lock_guard lock(mu_);
+    state = state_;
+    snapshot = snapshot_;
+  }
+
   void Save(const raft::RaftPersistState &state, const raft::Snapshot &snapshot) override {
     std::lock_guard lock(mu_);
     state_ = state;
@@ -46,7 +54,11 @@ class MockingPersister : public PersistentInterface {
 
   int RaftStateSize() const override {
     std::lock_guard lock(mu_);
-    return static_cast<int>(state_->Size());
+    if (!state_) {
+      return 0;
+    }
+
+    return static_cast<int>(state_->Size() * sizeof(shardkv::Op));
   }
 
   std::optional<raft::RaftPersistState> state_;

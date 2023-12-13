@@ -9,10 +9,10 @@
 #include "common/container/concurrent_blocking_queue.h"
 #include "common/thread_pool.h"
 #include "common/thread_registry.h"
+#include "network/client_end.h"
 #include "raft/common.h"
 #include "raft/log_manager.h"
 #include "raft/voter.h"
-#include "network/rpc_interface.h"
 #include "storage/persistent_interface.h"
 
 namespace kv::raft {
@@ -23,8 +23,8 @@ class Raft {
 
   Raft() = default;
 
-  Raft(std::vector<network::ClientEnd *> peers, uint32_t me, storage::PersistentInterface *persister,
-       std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>> apply_channel);
+  Raft(std::vector<network::ClientEnd *> peers, uint32_t me, std::shared_ptr<storage::PersistentInterface> persister,
+       apply_ch_t apply_channel);
 
   RequestVoteReply RequestVote(const RequestVoteArgs &args);
 
@@ -41,6 +41,15 @@ class Raft {
   InstallSnapshotReply InstallSnapshot(const InstallSnapshotArgs &args);
 
   int Test(int input) { return input + 100; }
+
+  inline int RaftStateSize() const { return persister_->RaftStateSize(); }
+
+  inline std::optional<raft::Snapshot> ReadSnapshot() const { return persister_->ReadRaftSnapshot(); }
+
+  inline bool IsLeader() const {
+    std::lock_guard lock(mu_);
+    return role_ == LEADER;
+  }
 
   inline void Kill() {
     lm_->Kill();
@@ -60,7 +69,8 @@ class Raft {
 
   int ComputePreviousIndexes(int old_pre_index, const AppendEntryReply &reply) const;
 
-  AppendEntriesResult RequestAppendEntry(int server, int prev_log_idx, int prev_log_term, bool commit, int commit_idx);
+  AppendEntriesResult RequestAppendEntry(int server, int prev_log_idx, int prev_log_term, bool commit, int commit_idx,
+                                         std::vector<LogEntry> entries = {});
 
   std::pair<std::vector<int>, int> NeedToRequestAppend() const;
 
@@ -94,11 +104,6 @@ class Raft {
 
   inline bool IsLeaderOutdate(int my_time, int leader_term) const { return my_time > leader_term; }
 
-  inline bool IsLeader() const {
-    std::lock_guard lock(mu_);
-    return role_ == LEADER;
-  }
-
   void TransitionToFollower(int new_term);
   void TransitionToCandidate();
   void TransitionToLeader();
@@ -121,7 +126,7 @@ class Raft {
 
   mutable std::mutex mu_;
   std::vector<network::ClientEnd *> peers_;
-  [[maybe_unused]] storage::PersistentInterface *persister_;
+  std::shared_ptr<storage::PersistentInterface> persister_;
   uint32_t me_;
   bool dead_{false};
 

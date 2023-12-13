@@ -1,7 +1,7 @@
 #include <iostream>
 
 #include "common/util.h"
-#include "network/grpc_client.h"
+// #include "network/grpc_client.h"
 #include "network/network.h"
 
 int main() {

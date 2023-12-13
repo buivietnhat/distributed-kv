@@ -7,16 +7,15 @@
 
 namespace kv::raft {
 
-Raft::Raft(std::vector<network::ClientEnd *> peers, uint32_t me, storage::PersistentInterface *persister,
-           std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>> apply_channel)
+Raft::Raft(std::vector<network::ClientEnd *> peers, uint32_t me,
+           std::shared_ptr<storage::PersistentInterface> persister, apply_ch_t apply_channel)
     : peers_(peers), persister_(persister), me_(me) {
-  Logger::Debug(kDTrace, me_, "....... Start .......");
+//  Logger::Debug(kDTrace, me_, "....... Start .......");
 
   voter_ = std::make_unique<Voter>(peers, me_);
   lm_ = std::make_unique<LogManager>(me_, apply_channel);
 
   // initialize from state persisted before a crash
-
   auto state = persister_->ReadRaftState();
   if (state) {
     ReadPersistState(*state);
@@ -204,6 +203,15 @@ void Raft::AttemptElection() {
 }
 
 void Raft::Ticker() {
+  // first run, need to elect quickly
+  auto ms1 = common::RandInt() % 50;
+  common::SleepMs(ms1);
+  if (voter_->LostConnectWithLeader()) {
+    voter_->ResetElectionTimer();
+    TransitionToCandidate();
+    AttemptElection();
+  }
+
   while (!Killed()) {
     // pause for a random amount of time between 50 and 350 milliseconds.
     auto ms = 50 + common::RandInt() % 300;
@@ -227,7 +235,7 @@ void Raft::Ticker() {
 }
 
 void Raft::Persist(const Snapshot &snapshot) const {
-//  Logger::Debug(kDPersist, me_, "Persisting data ...");
+  //  Logger::Debug(kDPersist, me_, "Persisting data ...");
   std::unique_lock l(mu_);
   RaftPersistState state;
   state.term_ = term_;

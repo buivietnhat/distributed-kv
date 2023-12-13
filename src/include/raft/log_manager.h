@@ -15,13 +15,15 @@ namespace kv::raft {
 
 class LogManager {
  public:
-  LogManager(int me, std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>> apply_channel);
+  LogManager(int me, apply_ch_t apply_channel);
 
   void CommitEntries(int start_idx, int from_idx, int to_idx);
 
   void ApplySnap(int snapshot_idx, int snapshot_term, const Snapshot &snap);
 
   std::vector<LogEntry> GetEntries(int start_idx) const;
+
+  std::vector<LogEntry> DoGetEntries(int start_idx) const;
 
   bool HasTerm(int term) const;
 
@@ -117,7 +119,7 @@ class LogManager {
 
   inline int GetCommitIndex() const {
     std::unique_lock l(mu_);
-    return commid_idx_;
+    return DoGetCommitIndex();
   }
 
   inline int GetTentativeCommitIndex() const {
@@ -178,9 +180,7 @@ class LogManager {
 
   inline bool Killed() const { return dead_; }
 
-  inline void DoSetLogs(std::vector<LogEntry> log) {
-    log_ = std::move(log);
-  }
+  inline void DoSetLogs(std::vector<LogEntry> log) { log_ = std::move(log); }
 
  private:
   void GenerateConflictingMsgReply(int conflicting_index, AppendEntryReply *reply);
@@ -194,14 +194,14 @@ class LogManager {
 
     auto actual_index = index - start_idx_;
     if (actual_index < 0) {
-      common::Logger::Debug(kDWarn, me_,
+      common::Logger::Debug(kDSnap, me_,
                             fmt::format("Entrie Exist: I've already discarded the log upto index {} > demand index {}",
                                         start_idx_, index));
       return false;
     }
 
     if (actual_index >= static_cast<int>(log_.size())) {
-      common::Logger::Debug(kDWarn, me_,
+      common::Logger::Debug(kDInfo, me_,
                             fmt::format("Entry Exist: the index {} is too far ahead, my startIdx {}, log len {}", index,
                                         start_idx_, log_.size()));
       return false;
@@ -218,7 +218,7 @@ class LogManager {
   }
 
   uint32_t me_;
-  std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>> apply_ch_;
+  apply_ch_t apply_ch_;
   mutable std::mutex mu_;
   mutable std::mutex apply_mu_;
   bool dead_{false};
