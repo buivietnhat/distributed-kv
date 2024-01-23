@@ -34,22 +34,17 @@ Raft::~Raft() {
     dead_ = true;
   }
 
-  std::cout << me_ << " raft returning... " << std::endl;
-
   if (tickert_.joinable()) {
     tickert_.join();
   }
-  std::cout << me_ << " raft return tickert_ ok" << std::endl;
 
   if (hbt_.joinable()) {
     hbt_.join();
   }
-  std::cout << me_ << " raft return hbt_ ok" << std::endl;
 
   if (ldwlt_.joinable()) {
     ldwlt_.join();
   }
-  std::cout << me_ << " raft return ldwlt_ ok" << std::endl;
 }
 
 RequestVoteReply Raft::RequestVote(const RequestVoteArgs &args) {

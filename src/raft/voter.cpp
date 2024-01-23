@@ -71,7 +71,6 @@ std::optional<VoteResult> Voter::DoRequestVote(std::shared_ptr<InternalState> st
 
   auto reply = SendRequestVote(server, args);
 
-  Logger::Debug(kDVote, me_, fmt::format("Sending request vote to S{} finished", server));
   if (reply) {
     VoteResult result;
     result.term_ = reply->term_;
@@ -97,6 +96,11 @@ std::pair<bool, int> Voter::AttemptElection(std::shared_ptr<InternalState> state
   auto done = std::make_shared<bool>(false);
   auto vote_channel = std::make_shared<boost::fibers::unbuffered_channel<VoteResult>>();
 
+  ON_SCOPE_EXIT {
+    *done = true;
+    vote_channel->close();
+  };
+
   for (size_t server = 0; server < peers_.size(); server++) {
     if (server != me_) {
       boost::fibers::fiber([me = shared_from_this(), state, server, done, chan = vote_channel] {
@@ -117,12 +121,7 @@ std::pair<bool, int> Voter::AttemptElection(std::shared_ptr<InternalState> state
     VoteResult result;
     vote_channel->pop(result);
 
-    ON_SCOPE_EXIT {
-      vote_channel->close();
-    };
-
     if (IsGaveUp() || Killed()) {
-      *done = true;
       Logger::Debug(kDVote, me_, "Well I have gave up or been Killed, I'm done with those election");
       VoteFor(-1);
       return {false, result.term_};
@@ -141,13 +140,11 @@ std::pair<bool, int> Voter::AttemptElection(std::shared_ptr<InternalState> state
     vote_finish += 1;
     if (vote_count > peers_.size() / 2) {
       Logger::Debug(kDVote, me_, fmt::format("I have collected enough vote now ({}), returning", vote_count));
-      *done = true;
       return {true, state->term_};
     }
 
     if (vote_finish == peers_.size()) {
       Logger::Debug(kDVote, me_, "Well I have tried by haven't collected enough vote, return...");
-      *done = true;
       break;
     }
   }
@@ -166,8 +163,6 @@ void Voter::ResetElectionTimer() {
   last_heard_from_leader_ = common::Now();
 }
 
-Voter::~Voter() {
-  std::cout << me_ << " voter returning ..." << std::endl;
-}
+Voter::~Voter() {}
 
 }  // namespace kv::raft

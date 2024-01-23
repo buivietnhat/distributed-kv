@@ -328,7 +328,6 @@ class Config {
 
       for (int i = 0; i < num_servers_; i++) {
         if (rafts_[i] != nullptr) {
-          std::cout << "cfg: killing Raft " << i << std::endl;
           rafts_[i]->Kill();
         }
       }

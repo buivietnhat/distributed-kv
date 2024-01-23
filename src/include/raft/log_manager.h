@@ -170,7 +170,7 @@ class LogManager {
 
   inline int AppendLog(std::any command, int term) {
     std::unique_lock l(mu_);
-    log_.emplace_back(term, command);
+    log_.push_back({term, command});
     return static_cast<int>(log_.size() - 1 + start_idx_);
   }
 

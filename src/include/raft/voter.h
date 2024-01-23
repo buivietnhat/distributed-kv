@@ -46,6 +46,8 @@ class Voter : public std::enable_shared_from_this<Voter> {
     voted_for_ = server;
   }
 
+  inline void Kill() { dead_ = true; }
+
  private:
   std::optional<RequestVoteReply> SendRequestVote(int server, const RequestVoteArgs &args) const;
 
@@ -54,8 +56,6 @@ class Voter : public std::enable_shared_from_this<Voter> {
   inline bool IsGaveUp() const { return give_up_; }
 
   inline bool Killed() { return dead_; }
-
-  inline void Kill() { dead_ = true; }
 
   std::vector<network::ClientEnd *> peers_;
   mutable boost::fibers::mutex mu_;

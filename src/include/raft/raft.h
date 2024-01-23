@@ -52,6 +52,7 @@ class Raft : public std::enable_shared_from_this<Raft> {
   }
 
   inline void Kill() {
+    voter_->Kill();
     lm_->Kill();
     dead_ = true;
   }
