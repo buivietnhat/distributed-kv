@@ -14,7 +14,7 @@ kv::shardkv::ShardKV::ShardKV(std::vector<network::ClientEnd *> servers, int me,
       persister_(persister) {
   Logger::Debug1(kDTrace, me_, gid_, "........... Start ..........");
 
-  apply_ch_ = std::make_shared<common::ConcurrentBlockingQueue<raft::ApplyMsg>>();
+  apply_ch_ = std::make_shared<raft::apply_channel_t>();
   rf_ = std::make_unique<raft::Raft>(std::move(servers), me_, persister, apply_ch_);
 
   mck_ = std::make_unique<shardctrler::Clerk>(ctrlers_);
@@ -27,11 +27,11 @@ kv::shardkv::ShardKV::ShardKV(std::vector<network::ClientEnd *> servers, int me,
     InstallSnapshot(*snapshot);
   }
 
-  raft_applied_thread_ = std::thread([&] { ListenFromRaft(); });
-  observe_raft_thread_ = std::thread([&] { ObserverRaftState(maxraftstate_); });
-  config_thread_ = std::thread([&] { ListenForConfigChanges(); });
+  raft_applied_thread_ = boost::fibers::fiber([&] { ListenFromRaft(); });
+  observe_raft_thread_ = boost::fibers::fiber([&] { ObserverRaftState(maxraftstate_); });
+  config_thread_ = boost::fibers::fiber([&] { ListenForConfigChanges(); });
 
-  std::thread([&] { RetrieveAllCommittedLogs(); }).detach();
+  boost::fibers::fiber([&] { RetrieveAllCommittedLogs(); }).detach();
 }
 
 ShardKV::~ShardKV() {
@@ -74,19 +74,22 @@ void ShardKV::InstallNewShard(int shard, const char *data) {
 
 void ShardKV::ListenFromRaft() {
   while (!Killed()) {
-    if (!apply_ch_->Empty()) {
-      raft::ApplyMsg m;
-      apply_ch_->Dequeue(&m);
+//    if (!apply_ch_->Empty()) {
+//      raft::ApplyMsg m;
+//      apply_ch_->Dequeue(&m);
+//      InstallRaftAppliedMsg(m);
+//    }
+    for (auto m : *apply_ch_) {
       InstallRaftAppliedMsg(m);
     }
   }
 
-  // dry all the cmd msgs before return
-  while (!apply_ch_->Empty()) {
-    raft::ApplyMsg m;
-    apply_ch_->Dequeue(&m);
-    InstallRaftAppliedMsg(m);
-  }
+//  // dry all the cmd msgs before return
+//  while (!apply_ch_->Empty()) {
+//    raft::ApplyMsg m;
+//    apply_ch_->Dequeue(&m);
+//    InstallRaftAppliedMsg(m);
+//  }
 }
 
 void ShardKV::InstallRaftAppliedMsg(const raft::ApplyMsg &m) {

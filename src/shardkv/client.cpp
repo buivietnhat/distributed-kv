@@ -69,9 +69,9 @@ bool kv::shardkv::Clerk::InstallShard(int srd_gid, int des_gid, int shard, const
   seq_number_ = (seq_number_ + 1) % INT64_MAX;
   l.unlock();
 
-//  Logger::Debug(
-//      kDCler, uuid_ % kMod,
-//      fmt::format("Request to install Shard {}  for Group {} with Seq {} ", shard, des_gid, args.seq_number_));
+  //  Logger::Debug(
+  //      kDCler, uuid_ % kMod,
+  //      fmt::format("Request to install Shard {}  for Group {} with Seq {} ", shard, des_gid, args.seq_number_));
 
   while (!Killed()) {
     if (cfg.groups_.contains(des_gid)) {

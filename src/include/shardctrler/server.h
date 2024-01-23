@@ -15,7 +15,7 @@ class LastOpTable {
 
  private:
   std::unordered_map<uint64_t, LastOp> table_;
-  mutable std::mutex mu_;
+  mutable boost::fibers::mutex mu_;
 };
 
 class ShardCtrler {
@@ -40,7 +40,7 @@ class ShardCtrler {
     dead_ = true;
 
     // wake up the applying msg thread
-    apply_ch_->Enqueue({});
+    apply_ch_->push({});
   }
 
   inline bool Killed() const { return dead_; }
@@ -64,13 +64,13 @@ class ShardCtrler {
 
   ShardConfig GenerateNewQueryConfig(const Op &cmd);
 
-  std::mutex mu_;
+  boost::fibers::mutex mu_;
   int me_;
   std::unique_ptr<raft::Raft> rf_;
-  raft::apply_ch_t apply_ch_;
+  raft::apply_channel_ptr apply_ch_;
   std::vector<ShardConfig> configs_;
   std::unique_ptr<LastOpTable> lot_;
-  std::thread raft_applied_thread_;
+  boost::fibers::fiber raft_applied_thread_;
   int last_applied_{0};
   bool dead_{false};
 };

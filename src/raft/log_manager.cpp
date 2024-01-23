@@ -2,7 +2,7 @@
 
 namespace kv::raft {
 
-LogManager::LogManager(int me, apply_ch_t apply_channel) : me_(me), apply_ch_(apply_channel) {
+LogManager::LogManager(int me, apply_channel_ptr apply_channel) : me_(me), apply_ch_(apply_channel) {
   log_.push_back({0, {}});
 }
 
@@ -98,7 +98,7 @@ void LogManager::ApplySnap(int snapshot_idx, int snapshot_term, const Snapshot &
   apply_msg.snapshot_term_ = snapshot_term;
   apply_msg.snapshot_ = snap;
 
-  apply_ch_->Enqueue(apply_msg);
+  apply_ch_->push(apply_msg);
 
   l.lock();
   commid_idx_ = snapshot_idx;
@@ -137,7 +137,7 @@ void LogManager::CommitEntries(int start_idx, int from_idx, int to_idx) {
     l.unlock();
     Logger::Debug(kDCommit, me_,
                   fmt::format("New Index {} committed with Term {}", idx, entries[idx - from_idx].term_));
-    apply_ch_->Enqueue(applymsg);
+    apply_ch_->push(applymsg);
   }
 }
 

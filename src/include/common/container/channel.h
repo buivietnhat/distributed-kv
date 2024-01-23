@@ -3,6 +3,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <optional>
+#include <boost/fiber/all.hpp>
 
 #include "common/container/concurrent_blocking_queue.h"
 #include "common/macros.h"
@@ -93,8 +94,8 @@ class Channel {
   T val_;
   bool has_value_{false};
   bool has_receiver_{false};
-  mutable std::mutex mu_;
-  std::condition_variable cond_;
+  mutable boost::fibers::mutex mu_;
+  boost::fibers::condition_variable cond_;
   std::atomic<bool> closed_{false};
 };
 

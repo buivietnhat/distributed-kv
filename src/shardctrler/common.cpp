@@ -14,7 +14,7 @@ Op GenerateJoinOp(int sender, const JoinArgs &args) {
   op.seq_number_ = args.seq_number_;
   op.servers_ = args.servers_;
   op.p_has_value_ = std::make_shared<bool>(false);
-  op.promise_ = std::make_shared<std::promise<ShardConfig>>();
+  op.promise_ = std::make_shared<boost::fibers::promise<ShardConfig>>();
 
   return op;
 }
@@ -27,7 +27,7 @@ Op GenerateLeaveOp(int sender, const LeaveArgs &args) {
   op.seq_number_ = args.seq_number_;
   op.gids_ = args.gids_;
   op.p_has_value_ = std::make_shared<bool>(false);
-  op.promise_ = std::make_shared<std::promise<ShardConfig>>();
+  op.promise_ = std::make_shared<boost::fibers::promise<ShardConfig>>();
 
   return op;
 }
@@ -41,7 +41,7 @@ Op GenerateMoveOp(int sender, const MoveArgs &args) {
   op.shard_ = args.shard_;
   op.gid_ = args.gid_;
   op.p_has_value_ = std::make_shared<bool>(false);
-  op.promise_ = std::make_shared<std::promise<ShardConfig>>();
+  op.promise_ = std::make_shared<boost::fibers::promise<ShardConfig>>();
 
   return op;
 }
@@ -54,7 +54,7 @@ Op GenerateQueryOp(int sender, const QueryArgs &args) {
   op.seq_number_ = args.seq_number_;
   op.num_ = args.num_;
   op.p_has_value_ = std::make_shared<bool>(false);
-  op.promise_ = std::make_shared<std::promise<ShardConfig>>();
+  op.promise_ = std::make_shared<boost::fibers::promise<ShardConfig>>();
 
   return op;
 }

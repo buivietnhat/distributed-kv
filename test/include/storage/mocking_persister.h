@@ -63,7 +63,7 @@ class MockingPersister : public PersistentInterface {
 
   std::optional<raft::RaftPersistState> state_;
   std::optional<raft::Snapshot> snapshot_;
-  mutable std::mutex mu_;
+  mutable boost::fibers::mutex mu_;
 };
 
 }  // namespace kv::storage

@@ -220,7 +220,7 @@ TEST(RaftPersistTest, UnreliableAgree) {
   for (int iters = 0; iters < 50; iters++) {
     for (int j = 0; j < 4; j++) {
       count += 1;
-      std::thread([&, iters, j] {
+      boost::fibers::thread([&, iters, j] {
         cfg.One(100 * iters + j, 1, true);
         count -= 1;
       }).detach();

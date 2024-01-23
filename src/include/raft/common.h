@@ -3,6 +3,7 @@
 #include <any>
 #include <string>
 #include <vector>
+#include <boost/fiber/all.hpp>
 
 #include "common/container/concurrent_blocking_queue.h"
 #include "common/logger.h"
@@ -10,6 +11,8 @@
 namespace kv::raft {
 
 using common::Logger;
+
+
 
 struct LogEntry {
   int term_;
@@ -46,13 +49,13 @@ struct Snapshot {
 };
 
 struct AppendEntryArgs {
-  bool hearbeat_;
-  bool commit_;
-  int leader_id_;
-  int leader_term_;
-  int prev_log_idx_;
-  int prev_log_term_;
-  int leader_commit_idx_;
+  bool hearbeat_{false};
+  bool commit_{false};
+  int leader_id_{-1};
+  int leader_term_{-1};
+  int prev_log_idx_{-1};
+  int prev_log_term_{-1};
+  int leader_commit_idx_{-1};
   std::vector<LogEntry> entries_;
 };
 
@@ -133,6 +136,9 @@ inline std::string ToString(Role role) {
   }
 }
 
-using apply_ch_t = std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>>;
+
+using apply_channel_t = boost::fibers::unbuffered_channel<ApplyMsg>;
+using apply_channel_ptr = std::shared_ptr<apply_channel_t>;
+using applier_t = std::function<void(int, apply_channel_ptr)>;
 
 }  // namespace kv::raft

@@ -15,7 +15,7 @@ namespace kv::raft {
 
 class LogManager {
  public:
-  LogManager(int me, apply_ch_t apply_channel);
+  LogManager(int me, apply_channel_ptr apply_channel);
 
   void CommitEntries(int start_idx, int from_idx, int to_idx);
 
@@ -218,9 +218,9 @@ class LogManager {
   }
 
   uint32_t me_;
-  apply_ch_t apply_ch_;
-  mutable std::mutex mu_;
-  mutable std::mutex apply_mu_;
+  apply_channel_ptr apply_ch_;
+  mutable boost::fibers::mutex mu_;
+  mutable boost::fibers::mutex apply_mu_;
   bool dead_{false};
 
   int commid_idx_{0};

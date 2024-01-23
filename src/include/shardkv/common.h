@@ -98,13 +98,13 @@ struct LastOp {
 template <typename T>
 struct Promise {
   std::shared_ptr<bool> p_has_value_;
-  std::shared_ptr<std::promise<T>> p_;
+  std::shared_ptr<boost::fibers::promise<T>> p_;
 
   inline bool Valid() const { return p_has_value_ != nullptr && *p_has_value_ == false; }
 
   Promise() {
     p_has_value_ = std::make_shared<bool>(false);
-    p_ = std::make_shared<std::promise<T>>();
+    p_ = std::make_shared<boost::fibers::promise<T>>();
   }
 
   void SetValue(T val) const {
@@ -132,7 +132,7 @@ struct Op {
 struct LastOpTable {
   // shard -> {clientid -> {seq, Reply}}
   std::unordered_map<int, std::unordered_map<uint64_t, LastOp>> table_;
-  std::mutex mu_;
+  boost::fibers::mutex mu_;
 };
 
 inline void to_json(nlohmann::json &j, const Reply &rep) {

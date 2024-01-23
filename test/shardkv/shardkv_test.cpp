@@ -379,9 +379,9 @@ TEST(ShardKVTest, ConcurrentTest) {
     }
   };
 
-  std::vector<std::thread> threads;
+  std::vector<boost::fibers::thread> threads;
   for (int i = 0; i < n; i++) {
-    threads.push_back(std::thread([&, i] { ff(i); }));
+    threads.push_back(boost::fibers::thread([&, i] { ff(i); }));
   }
 
   common::SleepMs(150);

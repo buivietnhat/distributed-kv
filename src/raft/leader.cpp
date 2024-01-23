@@ -45,7 +45,7 @@ void Raft::BroadcastHeartBeats() {
 
     for (uint32_t server = 0; server < peers_.size(); server++) {
       if (server != me_) {
-        std::thread([&, server = server, term = term] { SendHeartBeat(server, term); }).detach();
+        boost::fibers::fiber([me = shared_from_this(), server = server, term = term] { me->SendHeartBeat(server, term); }).detach();
       }
     }
 
@@ -293,8 +293,8 @@ std::pair<std::vector<int>, int> Raft::AnalyseToCommit(const std::unordered_map<
 void Raft::RequestAppendEntries(const std::vector<int> &replica_list, int start_idx) {
   auto logs_accepted = std::make_shared<uint32_t>(1);
   auto logs_finished = std::make_shared<uint32_t>(1);
-  auto log_mu = std::make_shared<std::mutex>();
-  auto log_cond = std::make_shared<std::condition_variable>();
+  auto log_mu = std::make_shared<boost::fibers::mutex>();
+  auto log_cond = std::make_shared<boost::fibers::condition_variable>();
 
   std::unique_lock l(mu_);
   auto last_log_idx = lm_->GetLastLogIdx();
@@ -307,8 +307,8 @@ void Raft::RequestAppendEntries(const std::vector<int> &replica_list, int start_
   }
 
   for (auto server : replica_list) {
-    thread_registry_.RegisterNewThread([&, server, start_idx, log_mu, logs_accepted, logs_finished, last_log_idx,
-                                        log_cond] {
+    boost::fibers::fiber([me = shared_from_this(), server, start_idx, log_mu, logs_accepted, logs_finished,
+                          last_log_idx, log_cond] {
       auto log_finish_func = [&] {
         std::unique_lock log_lock(*log_mu);
         *logs_finished += 1;
@@ -316,35 +316,35 @@ void Raft::RequestAppendEntries(const std::vector<int> &replica_list, int start_
         log_cond->notify_all();
       };
 
-      std::unique_lock l(mu_);
-      if (next_index_[server] >= last_log_idx + 1) {
-        tentative_next_index_[server] = last_log_idx + 1;
-        Logger::Debug(kDLeader, me_,
+      std::unique_lock l(me->mu_);
+      if (me->next_index_[server] >= last_log_idx + 1) {
+        me->tentative_next_index_[server] = last_log_idx + 1;
+        Logger::Debug(kDLeader, me->me_,
                       fmt::format("Gave up sending Logs to server {} since it has already been updated", server));
         l.unlock();
         log_finish_func();
         return;
       }
 
-      auto prev_log_idx = next_index_[server] - 1;
-      tentative_next_index_[server] = last_log_idx + 1;
-      Logger::Debug(kDInfo, me_, fmt::format("Set tentative nextId for server {} to {}", server, last_log_idx + 1));
+      auto prev_log_idx = me->next_index_[server] - 1;
+      me->tentative_next_index_[server] = last_log_idx + 1;
+      Logger::Debug(kDInfo, me->me_, fmt::format("Set tentative nextId for server {} to {}", server, last_log_idx + 1));
       l.unlock();
 
-      if (prev_log_idx < lm_->GetLastIncludedIndex()) {
-        Logger::Debug(kDSnap, me_, fmt::format("Replica {} is too lagged behind, send Snapshot instead", server));
-        SendLatestSnapshot(server);
+      if (prev_log_idx < me->lm_->GetLastIncludedIndex()) {
+        Logger::Debug(kDSnap, me->me_, fmt::format("Replica {} is too lagged behind, send Snapshot instead", server));
+        me->SendLatestSnapshot(server);
         log_finish_func();
         return;
       }
 
-      lm_->Lock();
-      if (lm_->DoGetStartIndex() != start_idx) {
-        lm_->Unlock();
+      me->lm_->Lock();
+      if (me->lm_->DoGetStartIndex() != start_idx) {
+        me->lm_->Unlock();
 
         l.lock();
-        tentative_next_index_[server] = next_index_[server];
-        Logger::Debug(kDLeader, me_,
+        me->tentative_next_index_[server] = me->next_index_[server];
+        Logger::Debug(kDLeader, me->me_,
                       fmt::format("Give up sending Logs to server {} since the snapshot just been installed", server));
         l.unlock();
 
@@ -352,13 +352,14 @@ void Raft::RequestAppendEntries(const std::vector<int> &replica_list, int start_
         return;
       }
 
-      auto prev_log_term = lm_->DoGetTerm(prev_log_idx);
-      auto entries = lm_->DoGetEntries(prev_log_idx + 1);
-      lm_->Unlock();
+      auto prev_log_term = me->lm_->DoGetTerm(prev_log_idx);
+      auto entries = me->lm_->DoGetEntries(prev_log_idx + 1);
+      me->lm_->Unlock();
 
-      auto r = RequestAppendEntry(server, prev_log_idx, prev_log_term, false, 0, std::move(entries));
-      if (!IsLeader() || Killed()) {
-        Logger::Debug(kDLeader, me_, "My internal state has changed, I gave up requesting appending logs to replicas");
+      auto r = me->RequestAppendEntry(server, prev_log_idx, prev_log_term, false, 0, std::move(entries));
+      if (!me->IsLeader() || me->Killed()) {
+        Logger::Debug(kDLeader, me->me_,
+                      "My internal state has changed, I gave up requesting appending logs to replicas");
         log_finish_func();
         return;
       }
@@ -367,10 +368,10 @@ void Raft::RequestAppendEntries(const std::vector<int> &replica_list, int start_
       if (r.last_log_idx_ == -1) {
         l.lock();
         // set back the change
-        tentative_next_index_[server] = next_index_[server];
+        me->tentative_next_index_[server] = me->next_index_[server];
         l.unlock();
 
-        Logger::Debug(kDInfo, me_,
+        Logger::Debug(kDInfo, me->me_,
                       fmt::format("The request to replicate the log to server {} has fail, return ...", r.server_));
         log_finish_func();
         return;
@@ -378,9 +379,9 @@ void Raft::RequestAppendEntries(const std::vector<int> &replica_list, int start_
 
       // appended successfully
       l.lock();
-      next_index_[r.server_] = std::max(next_index_[server], r.last_log_idx_ + 1);
-      match_index_[r.server_] = std::max(r.last_log_idx_, match_index_[r.server_]);
-      auto [commit_list, cmit_idx] = AnalyseToCommit(match_index_, r.server_);
+      me->next_index_[r.server_] = std::max(me->next_index_[server], r.last_log_idx_ + 1);
+      me->match_index_[r.server_] = std::max(r.last_log_idx_, me->match_index_[r.server_]);
+      auto [commit_list, cmit_idx] = me->AnalyseToCommit(me->match_index_, r.server_);
       l.unlock();
 
       std::unique_lock log_lock(*log_mu);
@@ -391,9 +392,9 @@ void Raft::RequestAppendEntries(const std::vector<int> &replica_list, int start_
       log_cond->notify_all();
 
       if (!commit_list.empty()) {
-        RequestCommits(commit_list, cmit_idx, start_idx);
+        me->RequestCommits(commit_list, cmit_idx, start_idx);
       }
-    });
+    }).detach();
   }
 
   // wait for all servers to finish, or the majority of servers has replicated
@@ -439,7 +440,9 @@ void Raft::RequestCommits(const std::vector<int> &server_list, int index, int st
       continue;
     }
 
-    thread_registry_.RegisterNewThread([&, s, index, prev_log_term] { RequestCommit(s, index, prev_log_term); });
+    boost::fibers::fiber([me = shared_from_this(), s, index, prev_log_term] {
+      me->RequestCommit(s, index, prev_log_term);
+    }).detach();
   }
 
   if (self_commit) {
@@ -558,9 +561,9 @@ void Raft::SendSnapshots(const std::vector<int> &replica_list, int last_included
   auto snap = std::make_shared<Snapshot>(snapshot);
 
   for (auto s : replica_list) {
-    thread_registry_.RegisterNewThread([&, s, last_included_index, last_included_term, leader_term, snap] {
-      SendSnapshot(s, last_included_index, last_included_term, leader_term, snap);
-    });
+    boost::fibers::fiber([me = shared_from_this(), s, last_included_index, last_included_term, leader_term, snap] {
+      me->SendSnapshot(s, last_included_index, last_included_term, leader_term, snap);
+    }).detach();
   }
 }
 

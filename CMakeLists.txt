@@ -13,7 +13,7 @@ message("${KV_SANITIZER} sanitizer enabled in debug mode.")
 # Compiler flags.
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Werror")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter -Wno-attributes")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -ggdb -fsanitize=${KV_SANITIZER} -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -ggdb -fno-omit-frame-pointer -fno-optimize-sibling-calls")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 message(STATUS "CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
@@ -50,6 +50,10 @@ endif ()
 find_package(TBB REQUIRED)
 message(STATUS "[FOUND] TBB ${TBB_VERSION}")
 
+# Boost
+find_package(Boost REQUIRED)
+message(STATUS "[FOUND] Boost ${Boost_VERSION}")
+
 # Includes.
 set(DISTRIBUTEDKV_SRC_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/src/include)
 set(DISTRIBUTEDKV_TEST_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/test/include)
@@ -59,6 +63,7 @@ include_directories(
         ${DISTRIBUTEDKV_TEST_INCLUDE_DIR}
         ${PROJECT_SOURCE_DIR}/third_party/fmt/include
         ${PROJECT_SOURCE_DIR}/third_party/json/include
+        ${Boost_INCLUDE_DIRS}
 )
 
 enable_testing()
@@ -76,9 +81,12 @@ file(GLOB_RECURSE
 
 set(KV_THIRDPARTY_LIBS
         TBB::tbb
+        boost_fiber
+        boost_context
         fmt)
 
-add_library(distributedkv STATIC ${DISTRIBUTEDKV_SRCS})
+add_library(distributedkv STATIC ${DISTRIBUTEDKV_SRCS}
+        src/include/common/fiber_manager.h)
 target_link_libraries(distributedkv ${KV_THIRDPARTY_LIBS})
 
 add_executable(main main/main.cpp)

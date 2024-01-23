@@ -15,7 +15,7 @@ class ClientEnd;
 
 namespace kv::raft {
 
-class Voter {
+class Voter : public std::enable_shared_from_this<Voter> {
  public:
   Voter(std::vector<network::ClientEnd *> peers, int me);
 
@@ -58,16 +58,16 @@ class Voter {
   inline void Kill() { dead_ = true; }
 
   std::vector<network::ClientEnd *> peers_;
-  mutable std::mutex mu_;
+  mutable boost::fibers::mutex mu_;
   int voted_for_{-1};
   std::atomic<bool> dead_{false};
   common::time_t last_heard_from_leader_;
   std::atomic<bool> give_up_{false};
   uint32_t me_;
-  common::ThreadPool pool_;
+//  common::ThreadPool pool_;
 
   static constexpr int MAX_WAIT_TIME = 500;
-  static constexpr int NUM_THREAD = 5;
+//  static constexpr int NUM_THREAD = 5;
 };
 
 }  // namespace kv::raft

@@ -70,6 +70,8 @@ std::optional<VoteResult> Voter::DoRequestVote(std::shared_ptr<InternalState> st
   args.candidate_ = me_;
 
   auto reply = SendRequestVote(server, args);
+
+  Logger::Debug(kDVote, me_, fmt::format("Sending request vote to S{} finished", server));
   if (reply) {
     VoteResult result;
     result.term_ = reply->term_;
@@ -93,27 +95,31 @@ std::pair<bool, int> Voter::AttemptElection(std::shared_ptr<InternalState> state
   TryAgain();
 
   auto done = std::make_shared<bool>(false);
-  auto vote_channel = std::make_shared<common::ConcurrentBlockingQueue<VoteResult>>();
+  auto vote_channel = std::make_shared<boost::fibers::unbuffered_channel<VoteResult>>();
 
   for (size_t server = 0; server < peers_.size(); server++) {
     if (server != me_) {
-      pool_.AddTask([&, state, server, done, chan = vote_channel] {
-        auto vote_result = DoRequestVote(state, server);
+      boost::fibers::fiber([me = shared_from_this(), state, server, done, chan = vote_channel] {
+        auto vote_result = me->DoRequestVote(state, server);
         if (*done) {
           return;
         }
         if (vote_result) {
-          chan->Enqueue(*vote_result);
+          chan->push(*vote_result);
         } else {
-          chan->Enqueue({});
+          chan->push({});
         }
-      });
+      }).detach();
     }
   }
 
-  while (true) {
+  while (!Killed()) {
     VoteResult result;
-    vote_channel->Dequeue(&result);
+    vote_channel->pop(result);
+
+    ON_SCOPE_EXIT {
+      vote_channel->close();
+    };
 
     if (IsGaveUp() || Killed()) {
       *done = true;
@@ -160,6 +166,8 @@ void Voter::ResetElectionTimer() {
   last_heard_from_leader_ = common::Now();
 }
 
-Voter::~Voter() {}
+Voter::~Voter() {
+  std::cout << me_ << " voter returning ..." << std::endl;
+}
 
 }  // namespace kv::raft

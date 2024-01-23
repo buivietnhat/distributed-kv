@@ -1,7 +1,5 @@
 #pragma once
 
-#include <tbb/task_group.h>
-
 #include <future>
 #include <iostream>
 #include <mutex>
@@ -9,6 +7,7 @@
 #include <string>
 #include <unordered_map>
 #include <variant>
+#include <boost/fiber/all.hpp>
 
 #include "common/container/channel.h"
 #include "common/container/concurrent_blocking_queue.h"
@@ -50,7 +49,7 @@ struct RequestMessage {
 };
 
 struct Server {
-  std::mutex mu_;
+  boost::fibers::mutex mu_;
   raft::Raft *raft_;
   std::shared_ptr<shardctrler::ShardCtrler> shardctrler_;
   std::shared_ptr<shardkv::ShardKV> shardkv_;
@@ -382,9 +381,9 @@ class MockingClientEnd : public ClientEnd {
   bool finished_{false};
 };
 
-class Network {
+class Network : public std::enable_shared_from_this<Network> {
  public:
-  explicit Network() { dp_thread_ = std::thread(&Network::DispatchRequests, this); }
+  explicit Network() { dp_thread_ = boost::fibers::fiber(&Network::DispatchRequests, this); }
 
   ~Network() { Cleanup(); }
 
@@ -443,6 +442,7 @@ class Network {
       chan_.Close();
       dp_thread_.join();
     }
+    std::cout << "network return ok" << std::endl;
   }
 
   int GetCount(const std::string &servername) const { return servers_.at(servername)->GetCount(); }
@@ -455,7 +455,8 @@ class Network {
       if (req.chan_ == nullptr) {
         continue;
       }
-      tr_.RegisterNewThread([&, req = std::move(req)] { ProcessRequest(std::move(req)); });
+//      tr_.RegisterNewThread([&, req = std::move(req)] { ProcessRequest(std::move(req)); });
+      boost::fibers::fiber([me = shared_from_this(), req = std::move(req)] { me->ProcessRequest(std::move(req)); }).detach();
     }
   }
 
@@ -474,7 +475,7 @@ class Network {
       if (!reliable) {
         // short delay
         auto ms = common::RandInt() % 27;
-        std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+        boost::this_fiber::sleep_for(std::chrono::milliseconds(ms));
       }
 
       if (!reliable && (common::RandInt() % 1000 < 100)) {
@@ -487,17 +488,17 @@ class Network {
       // we can periodically check if the server has been killed and the RPC should
       // get a failure reply
       ReplyMessage reply;
-      std::mutex m;
-      std::condition_variable cond;
+      boost::fibers::mutex m;
+      boost::fibers::condition_variable cond;
       auto reply_ok = std::make_shared<bool>(false);
       auto is_server_dead = std::make_shared<bool>(false);
 
-      auto fut1 = std::async(std::launch::async, [&, reply_ok, server = server] {
+      boost::fibers::fiber([&, reply_ok, server = server] {
         reply = server->DispatchReq(req);
         std::lock_guard l(m);
         *reply_ok = true;
         cond.notify_one();
-      });
+      }).detach();
 
       *is_server_dead = IsServerDead(req.endname_, servername, server.get());
 
@@ -522,7 +523,7 @@ class Network {
       } else if (longreordering == true && common::RandNInt(900) < 600) {
         // delay the response for a while
         auto ms = 200 + common::RandNInt(1 + common::RandNInt(2000));
-        std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+        boost::this_fiber::sleep_for(std::chrono::milliseconds(ms));
         req.chan_->Send(reply);
       } else {
         req.chan_->Send(reply);
@@ -535,7 +536,7 @@ class Network {
       } else {
         ms = common::RandInt() % 100;
       }
-      std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+      boost::this_fiber::sleep_for(std::chrono::milliseconds(ms));
       req.chan_->Send({});
     }
   }
@@ -564,7 +565,7 @@ class Network {
     return false;
   }
 
-  std::mutex mu_;
+  boost::fibers::mutex mu_;
   bool reliable_{true};
   bool long_delay_{false};
   bool long_reordering_{false};
@@ -573,9 +574,9 @@ class Network {
   std::unordered_map<std::string, std::shared_ptr<Server>> servers_;
   std::unordered_map<std::string, std::string> connections_;  // endname -> server name
   common::Channel<RequestMessage> chan_;
-  std::thread dp_thread_;
+  boost::fibers::fiber dp_thread_;
   bool finished_{false};
-  common::ThreadRegistry tr_;
+//  common::ThreadRegistry tr_;
 };
 
 }  // namespace kv::network

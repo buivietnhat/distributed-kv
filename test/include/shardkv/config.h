@@ -315,7 +315,7 @@ class Config {
 
   std::string CtrlerName(int i) { return "ctrler" + std::to_string(i); }
 
-  std::mutex mu_;
+  boost::fibers::mutex mu_;
   std::unique_ptr<network::Network> net_;
   common::time_t start_;
 

@@ -306,7 +306,7 @@ class Config {
     return execution_time > 180;
   }
 
-  mutable std::mutex mu_;
+  mutable boost::fibers::mutex mu_;
   std::unique_ptr<network::Network> net_;
   bool finished_{false};
   int n_;

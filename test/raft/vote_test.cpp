@@ -71,12 +71,12 @@ TEST(RaftVoteTest, ReElection) {
   EXPECT_TRUE(cfg.CheckNoLeader());
 
   // if a quorum arises, it should elect a leader.
-  Logger::Debug(kDTest, -1, fmt::format("Connect with ShardKV {}", (leader2 + 1) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", (leader2 + 1) % servers));
   cfg.Connect((leader2 + 1) % servers);
   EXPECT_NE(-1, cfg.CheckOneLeader());
 
   // re-join of last node shouldn't prevent leader from existing
-  Logger::Debug(kDTest, -1, fmt::format("Connect with ShardKV {}", leader2));
+  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", leader2));
   cfg.Connect(leader2);
   EXPECT_NE(-1, cfg.CheckOneLeader());
 

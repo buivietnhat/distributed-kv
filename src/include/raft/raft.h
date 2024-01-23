@@ -17,14 +17,14 @@
 
 namespace kv::raft {
 
-class Raft {
+class Raft : public std::enable_shared_from_this<Raft> {
  public:
   using enum Role;
 
   Raft() = default;
 
   Raft(std::vector<network::ClientEnd *> peers, uint32_t me, std::shared_ptr<storage::PersistentInterface> persister,
-       apply_ch_t apply_channel);
+       apply_channel_ptr apply_channel);
 
   RequestVoteReply RequestVote(const RequestVoteArgs &args);
 
@@ -124,7 +124,7 @@ class Raft {
 
   std::shared_ptr<InternalState> CaptureCurrentState() const;
 
-  mutable std::mutex mu_;
+  mutable boost::fibers::mutex mu_;
   std::vector<network::ClientEnd *> peers_;
   std::shared_ptr<storage::PersistentInterface> persister_;
   uint32_t me_;
@@ -138,14 +138,14 @@ class Raft {
   std::unordered_map<int, int> tentative_cmit_index_;
   std::unordered_map<int, int> match_index_;
 
-  std::unique_ptr<Voter> voter_;
-  std::unique_ptr<LogManager> lm_;
+  std::shared_ptr<Voter> voter_;
+  std::shared_ptr<LogManager> lm_;
 
-  std::thread tickert_;
-  std::thread hbt_;
-  std::thread ldwlt_;
+  boost::fibers::fiber tickert_;
+  boost::fibers::fiber hbt_;
+  boost::fibers::fiber ldwlt_;
 
-  common::ThreadRegistry thread_registry_;
+//  common::ThreadRegistry thread_registry_;
 
   static constexpr int NUM_THREAD = 5;
 };

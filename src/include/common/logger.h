@@ -52,7 +52,7 @@ class Logger {
     }
 
     auto log = prefix + message + "\n";
-    std::cout << log;
+    fmt::print("{}", log);
 #endif
   }
 
@@ -66,7 +66,7 @@ class Logger {
     }
 
     auto log = prefix + message + "\n";
-    std::cout << log;
+    fmt::print("{}", log);
 #endif
   }
 };
