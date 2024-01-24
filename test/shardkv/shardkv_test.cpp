@@ -22,7 +22,7 @@ bool Check(Clerk *ck, const std::string &key, const std::string &value) {
 }
 
 // test static 2-way sharding, without shard movement
-TEST(ShardKVTest, DISABLED_TestStaticShards) {
+TEST(ShardKVTest, TestStaticShards) {
   Logger::Debug(kDTest, -1, "Test: static shards ...");
 
   Config cfg(3, false, -1);
@@ -56,29 +56,43 @@ TEST(ShardKVTest, DISABLED_TestStaticShards) {
     cfg.CheckLogs();  // forbid snapshots
 
     std::vector<std::shared_ptr<Clerk>> cls;
-    auto ch = std::make_shared<common::ConcurrentBlockingQueue<std::string>>();
-    common::ThreadRegistry tr;
+    auto ch = std::make_shared<boost::fibers::unbuffered_channel<std::string>>();
+    ON_SCOPE_EXIT { ch->close(); };
+
+    std::vector<boost::fibers::fiber> threads;
+    ON_SCOPE_EXIT {
+      for (auto &f : threads) {
+        f.join();
+      }
+    };
     for (int xi = 0; xi < n; xi++) {
       std::shared_ptr<Clerk> ck1 = cfg.MakeClient();  // only one call allowed per client
       cls.push_back(ck1);
-      tr.RegisterNewThread([&, ck1, i = xi] {
+      threads.push_back(boost::fibers::fiber([&, ck1, i = xi] {
         auto v = ck1->Get(ka[i]);
         if (v != va[i]) {
-          ch->Enqueue(fmt::format("Get({}): expected:\n{}\nreceived:\n{}", ka[i], va[i], v));
+          ch->push(fmt::format("Get({}): expected: {} received: {}", ka[i], va[i], v));
         } else {
-          ch->Enqueue("");
+          ch->push("");
         }
-      });
+      }));
     }
 
     // wait a bit, only about half the Gets should succeed.
     int ndone = 0;
     auto start = common::Now();
+    boost::fibers::fiber f([&] {
+      boost::this_fiber::sleep_for(MS(2000));
+      ch->close();
+    });
+    ON_SCOPE_EXIT { f.join(); };
+
     while (common::ElapsedTimeS(start, common::Now()) < 2) {
-      if (!ch->Empty()) {
-        std::string err;
-        ch->Dequeue(&err);
+      std::string err;
+
+      if (ch->pop(err) == boost::fibers::channel_op_status::success) {
         if (err != "") {
+          Logger::Debug(kDTest, -1, fmt::format("{}", err));
           throw SHARDKV_EXCEPTION(err);
         }
         ndone += 1;
@@ -107,7 +121,7 @@ TEST(ShardKVTest, DISABLED_TestStaticShards) {
   EXPECT_TRUE(cfg.CleanUp());
 }
 
-TEST(ShardKVTest, DISABLED_TestJoinLeave) {
+TEST(ShardKVTest, TestJoinLeave) {
   Logger::Debug(kDTest, -1, "Test: join then leave");
 
   Config cfg(3, false, -1);
@@ -170,7 +184,7 @@ TEST(ShardKVTest, DISABLED_TestJoinLeave) {
   EXPECT_TRUE(cfg.CleanUp());
 }
 
-TEST(ShardKVTest, DISABLED_TestSnapshot) {
+TEST(ShardKVTest, TestSnapshot) {
   Logger::Debug(kDTest, -1, "Test: snapshots, join, and leave ...\n");
 
   Config cfg(3, false, 1000);
@@ -247,7 +261,7 @@ TEST(ShardKVTest, DISABLED_TestSnapshot) {
   EXPECT_TRUE(cfg.CleanUp());
 }
 
-TEST(ShardKVTest, DISABLED_TestMissChange) {
+TEST(ShardKVTest,TestMissChange) {
   Logger::Debug(kDTest, -1, "Test: servers miss configuration changes ...");
 
   Config cfg(3, false, 1000);
@@ -379,9 +393,9 @@ TEST(ShardKVTest, ConcurrentTest) {
     }
   };
 
-  std::vector<boost::fibers::thread> threads;
+  std::vector<boost::fibers::fiber> threads;
   for (int i = 0; i < n; i++) {
-    threads.push_back(boost::fibers::thread([&, i] { ff(i); }));
+    threads.push_back(boost::fibers::fiber([&, i] { ff(i); }));
   }
 
   common::SleepMs(150);
@@ -440,7 +454,7 @@ TEST(ShardKVTest, ConcurrentTest) {
   EXPECT_TRUE(cfg.CleanUp());
 }
 
-TEST(ShardKVTest, DISABLED_Unreliable) {
+TEST(ShardKVTest, Unreliable) {
   Logger::Debug(kDTest, -1, "Test: unreliable");
 
   Config cfg(3, true, 100);

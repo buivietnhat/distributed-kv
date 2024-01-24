@@ -139,7 +139,7 @@ void ShardKV::SendInstallShard(int shard, int gid, const shardctrler::ShardConfi
         kDLeader1, me_, gid_,
         fmt::format("Reqest to install shard {} for Group {} config Num {} successfully", shard, gid, cfg.num_));
 
-    thread_registry_.RegisterNewThread([&, shard, cfg_num = std::move(cfg.num_)] { SendRemoveShard(shard, cfg_num); });
+    boost::fibers::fiber([me = shared_from_this(), shard, cfg_num = std::move(cfg.num_)] { me->SendRemoveShard(shard, cfg_num); }).detach();
   }
 }
 

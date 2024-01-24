@@ -20,6 +20,8 @@ std::string kv::shardkv::Clerk::Get(const std::string &key) {
   seq_number_ = (seq_number_ + 1) % INT64_MAX;
   l.unlock();
 
+  Logger::Debug(kDCler, uuid_ % kMod, fmt::format("Request Get for key {} with Seq {}", key, args.seq_number_));
+
   while (!Killed()) {
     auto shard = KeyToShard(key);
     auto gid = config_.shards_[shard];
@@ -104,6 +106,9 @@ void kv::shardkv::Clerk::PutAppend(const std::string &key, const std::string &va
   args.seq_number_ = seq_number_;
   seq_number_ = (seq_number_ + 1) % INT64_MAX;
   l.unlock();
+
+  Logger::Debug(kDCler, uuid_ % kMod,
+                fmt::format("Request {} for key {} val {} with Seq {}", ToString(op), key, value, args.seq_number_));
 
   while (!Killed()) {
     auto shard = KeyToShard(key);

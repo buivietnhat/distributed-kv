@@ -21,7 +21,8 @@ struct Group {
 
 class Config {
  public:
-  Config(int n, bool unreliable, int maxraftstate) : n_(n), maxraftstate_(maxraftstate) {
+  Config(int n, bool unreliable, int maxraftstate, int num_worker = DEFAULT_NUM_WORKER)
+      : ftm_(num_worker), n_(n), maxraftstate_(maxraftstate) {
     net_ = std::make_unique<network::Network>();
     start_ = common::Now();
 
@@ -315,8 +316,9 @@ class Config {
 
   std::string CtrlerName(int i) { return "ctrler" + std::to_string(i); }
 
+  common::FiberThreadManager ftm_;
   boost::fibers::mutex mu_;
-  std::unique_ptr<network::Network> net_;
+  std::shared_ptr<network::Network> net_;
   common::time_t start_;
 
   int nctrlers_;
@@ -331,6 +333,7 @@ class Config {
   int next_client_id_;
   int maxraftstate_;
   bool finished_{false};
+  static constexpr int DEFAULT_NUM_WORKER = 6;
 };
 
 }  // namespace kv::shardkv

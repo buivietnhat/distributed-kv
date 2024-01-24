@@ -15,7 +15,7 @@ kv::shardkv::ShardKV::ShardKV(std::vector<network::ClientEnd *> servers, int me,
   Logger::Debug1(kDTrace, me_, gid_, "........... Start ..........");
 
   apply_ch_ = std::make_shared<raft::apply_channel_t>();
-  rf_ = std::make_unique<raft::Raft>(std::move(servers), me_, persister, apply_ch_);
+  rf_ = std::make_shared<raft::Raft>(std::move(servers), me_, persister, apply_ch_);
 
   mck_ = std::make_unique<shardctrler::Clerk>(ctrlers_);
   kvcl_ = std::make_unique<Clerk>(ctrlers_, make_end_);
@@ -39,6 +39,8 @@ ShardKV::~ShardKV() {
 
   pending_shards_ready_ch_.Close();
   up_to_date_ch_.Close();
+
+  apply_ch_->close();
 
   if (raft_applied_thread_.joinable()) {
     raft_applied_thread_.join();
@@ -74,22 +76,22 @@ void ShardKV::InstallNewShard(int shard, const char *data) {
 
 void ShardKV::ListenFromRaft() {
   while (!Killed()) {
-//    if (!apply_ch_->Empty()) {
-//      raft::ApplyMsg m;
-//      apply_ch_->Dequeue(&m);
-//      InstallRaftAppliedMsg(m);
-//    }
-    for (auto m : *apply_ch_) {
-      InstallRaftAppliedMsg(m);
-    }
+    //    if (!apply_ch_->Empty()) {
+    raft::ApplyMsg m;
+    apply_ch_->pop(m);
+    //      InstallRaftAppliedMsg(m);
+    //    }
+    //    for (auto m : *apply_ch_) {
+    InstallRaftAppliedMsg(m);
+    //    }
   }
 
-//  // dry all the cmd msgs before return
-//  while (!apply_ch_->Empty()) {
-//    raft::ApplyMsg m;
-//    apply_ch_->Dequeue(&m);
-//    InstallRaftAppliedMsg(m);
-//  }
+  //  // dry all the cmd msgs before return
+  //  while (!apply_ch_->Empty()) {
+  //    raft::ApplyMsg m;
+  //    apply_ch_->Dequeue(&m);
+  //    InstallRaftAppliedMsg(m);
+  //  }
 }
 
 void ShardKV::InstallRaftAppliedMsg(const raft::ApplyMsg &m) {
@@ -310,7 +312,7 @@ void ShardKV::RetrieveAllCommittedLogs() {
   }
 
   std::atomic<bool> up_to_date = false;
-  auto fut = std::async(std::launch::async, [&] {
+  boost::fibers::fiber f([&] {
     auto up_to_date = up_to_date_ch_.Receive(15000);  // max timeout 15s
     if (Killed()) {
       Logger::Debug1(kDTrace, me_, gid_, "RetrieveCommits: return while waiting for the result");
@@ -324,6 +326,7 @@ void ShardKV::RetrieveAllCommittedLogs() {
 
     up_to_date = true;
   });
+  ON_SCOPE_EXIT { f.join(); };
 
   while (!up_to_date && !Killed()) {
     if (rf_->IsLeader()) {
