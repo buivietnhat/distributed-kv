@@ -16,7 +16,7 @@ ShardCtrler::ShardCtrler(std::vector<network::ClientEnd *> servers, int me,
   configs_.push_back({});
 
   apply_ch_ = std::make_shared<raft::apply_channel_t>();
-  rf_ = std::make_unique<raft::Raft>(std::move(servers), me, persister, apply_ch_);
+  rf_ = std::make_shared<raft::Raft>(std::move(servers), me, persister, apply_ch_);
 
   lot_ = std::make_unique<LastOpTable>();
 
@@ -24,6 +24,7 @@ ShardCtrler::ShardCtrler(std::vector<network::ClientEnd *> servers, int me,
 }
 
 ShardCtrler::~ShardCtrler() {
+  apply_ch_->close();
   if (raft_applied_thread_.joinable()) {
     raft_applied_thread_.join();
   }
@@ -271,20 +272,21 @@ QueryReply ShardCtrler::Query(const QueryArgs &args) {
 
 void ShardCtrler::ListenFromRaft() {
   while (!Killed()) {
-    //    raft::ApplyMsg m;
+    raft::ApplyMsg m;
+    apply_ch_->pop(m);
     //    apply_ch_->Dequeue(&m);
     //    InstallRaftAppliedMsg(m);
-    for (auto m : *apply_ch_) {
-      InstallRaftAppliedMsg(m);
-    }
+    //    for (auto m : *apply_ch_) {
+    InstallRaftAppliedMsg(m);
+    //    }
   }
 
   // dry all the cmd msgs
-//  while (!apply_ch_->Empty()) {
-//    raft::ApplyMsg m;
-//    apply_ch_->Dequeue(&m);
-//    InstallRaftAppliedMsg(m);
-//  }
+  //  while (!apply_ch_->Empty()) {
+  //    raft::ApplyMsg m;
+  //    apply_ch_->Dequeue(&m);
+  //    InstallRaftAppliedMsg(m);
+  //  }
 }
 
 void ShardCtrler::InstallRaftAppliedMsg(const raft::ApplyMsg &m) {
@@ -312,7 +314,7 @@ void ShardCtrler::InstallCmdMsg(const Op &cmd) {
   // need to check if I've already served the request
   if (auto [served, _] = lot_->HasRequestBeenServed(cmd.client_id_, cmd.seq_number_); served) {
     Logger::Debug(kDDrop, me_,
-                  fmt::format("InstallCmdMsg: client %d with seq %d has already been served, return ...",
+                  fmt::format("InstallCmdMsg: client {} with seq {} has already been served, return ...",
                               cmd.client_id_ % kRound, cmd.seq_number_));
     if (cmd.sender_ == me_ && *cmd.p_has_value_ == false) {
       cmd.promise_->set_value(std::move(config));

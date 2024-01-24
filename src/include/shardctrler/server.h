@@ -66,7 +66,7 @@ class ShardCtrler {
 
   boost::fibers::mutex mu_;
   int me_;
-  std::unique_ptr<raft::Raft> rf_;
+  std::shared_ptr<raft::Raft> rf_;
   raft::apply_channel_ptr apply_ch_;
   std::vector<ShardConfig> configs_;
   std::unique_ptr<LastOpTable> lot_;

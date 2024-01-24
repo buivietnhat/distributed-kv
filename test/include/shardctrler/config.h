@@ -4,6 +4,7 @@
 #include <mutex>
 #include <vector>
 
+#include "common/fiber_manager.h"
 #include "common/util.h"
 #include "network/network.h"
 #include "shardctrler/client.h"
@@ -23,8 +24,8 @@ inline std::vector<network::ClientEnd *> RandomHandlers(std::vector<network::Cli
 
 class Config {
  public:
-  Config(int n, bool unreliable) {
-    net_ = std::make_unique<network::Network>();
+  Config(int n, bool unreliable, int num_worker = DEFAULT_NUM_WORKER) : ftm_(num_worker) {
+    net_ = std::make_shared<network::Network>();
     n_ = n;
     servers_.resize(n_);
     saved_.resize(n_);
@@ -306,8 +307,9 @@ class Config {
     return execution_time > 180;
   }
 
+  common::FiberThreadManager ftm_;
   mutable boost::fibers::mutex mu_;
-  std::unique_ptr<network::Network> net_;
+  std::shared_ptr<network::Network> net_;
   bool finished_{false};
   int n_;
   std::vector<std::shared_ptr<ShardCtrler>> servers_;
@@ -316,6 +318,7 @@ class Config {
   std::unordered_map<std::shared_ptr<Clerk>, std::vector<std::string>> clerks_;
   int next_client_id_;
   common::time_t start_;
+  static constexpr int DEFAULT_NUM_WORKER = 6;
 };
 
 }  // namespace kv::shardctrler

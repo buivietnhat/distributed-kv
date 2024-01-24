@@ -211,7 +211,7 @@ TEST(ShardCtrlerTest, TestBasic) {
 
   for (int xi = 0; xi < npara; xi++) {
     gids[xi] = xi * 10 + 100;
-    boost::fibers::thread([&, i = xi] {
+    boost::fibers::fiber([&, i = xi] {
       int gid = gids[i];
       auto sid1 = fmt::format("s{}a", gid);
       auto sid2 = fmt::format("s{}b", gid);
@@ -335,7 +335,7 @@ TEST(ShardCtrlerTest, TestMulti) {
   for (int xi = 0; xi < npara; xi++) {
     wg += 1;
     gids[xi] = xi + 1000;
-    boost::fibers::thread([&, i = xi] {
+    boost::fibers::fiber([&, i = xi] {
       auto gid = gids[i];
       cka[i]->Join({
           {gid, {fmt::format("{}a", gid), fmt::format("{}b", gid), fmt::format("{}c", gid)}},
