@@ -16,23 +16,23 @@ class FiberThreadManager {
     cv_ = std::make_shared<boost::fibers::condition_variable>();
 
     boost::fibers::use_scheduling_algorithm<boost::fibers::algo::shared_work>();
-    boost::fibers::detail::thread_barrier b(num_worker);
+    auto b = std::make_shared<boost::fibers::detail::thread_barrier>(num_worker);
 
 
     workers_.reserve(num_worker - 1);
     for (int i = 0; i < num_worker_ - 1; i++) {
-      workers_.push_back(std::thread([&b, mu = mu_, cv = cv_, finish = finish_] {
+      workers_.push_back(std::thread([b, mu = mu_, cv = cv_, finish = finish_] {
         // join the shared work scheduling
 
         boost::fibers::use_scheduling_algorithm<boost::fibers::algo::shared_work>();
-        b.wait();  // sync with other threads, allow them to start processing
+        b->wait();  // sync with other threads, allow them to start processing
 
         std::unique_lock l(*mu);
         cv->wait(l, [&] { return *finish; });
       }));
     }
 
-    b.wait();
+    b->wait();
   }
 
   ~FiberThreadManager() {

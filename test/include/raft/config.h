@@ -22,7 +22,7 @@ namespace kv::raft {
 
 static constexpr int RAFT_ELECTION_TIMEOUT = 1000;
 static constexpr int SNAPSHOT_INTERVAL = 10;
-static constexpr int MAXLOGSIZE = 2000;
+static constexpr int MAXLOGSIZE = 20000;
 
 using common::Logger;
 
@@ -336,7 +336,6 @@ class Config {
 
       // wake up all the apply channels to finish the thread
       for (auto &apply_ch : apply_chs_) {
-//        apply_ch->Enqueue({});
         apply_ch->close();
       }
       for (auto &thread : apply_threads_) {
@@ -424,12 +423,12 @@ class Config {
     return true;
   }
 
-  inline std::function<void(int, apply_channel_t)> GetApplier() {
-    return [&](int server_num, apply_channel_t apply_channel) { Applier(server_num, apply_channel); };
+  inline raft::applier_t GetApplier() {
+    return [&](int server_num, apply_channel_ptr apply_channel) { Applier(server_num, apply_channel); };
   }
 
-  inline std::function<void(int, apply_channel_t)> GetApplierSnap() {
-    return [&](int server_num, apply_channel_t apply_channel) { ApplierSnap(server_num, apply_channel); };
+  inline raft::applier_t GetApplierSnap() {
+    return [&](int server_num, apply_channel_ptr apply_channel) { ApplierSnap(server_num, apply_channel); };
   }
 
   // Maximum log size across all servers

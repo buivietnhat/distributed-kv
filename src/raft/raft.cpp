@@ -48,7 +48,7 @@ Raft::~Raft() {
 }
 
 RequestVoteReply Raft::RequestVote(const RequestVoteArgs &args) {
-  Logger::Debug(kDInfo, me_, fmt::format("Receive request vote from S{} for term {}", args.candidate_, args.term_));
+  Logger::Debug(kDVote, me_, fmt::format("Receive request vote from S{} for term {}", args.candidate_, args.term_));
   RequestVoteReply reply;
   std::unique_lock l(mu_);
   if (args.term_ < term_) {

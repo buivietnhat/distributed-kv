@@ -24,14 +24,14 @@ static void SnapCommon(const std::string &name, bool disconnect, bool reliable, 
     }
 
     if (disconnect) {
-      Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", victim));
+      Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", victim));
       cfg.Disconnect(victim);
 
       cfg.One(common::RandInt(), servers - 1, true);
     }
 
     if (crash) {
-      Logger::Debug(kDTest, -1, fmt::format("Crash the ShardKV {}", victim));
+      Logger::Debug(kDTest, -1, fmt::format("Crash the Server {}", victim));
       cfg.Crash(victim);
       cfg.One(common::RandInt(), servers - 1, true);
     }
@@ -57,7 +57,7 @@ static void SnapCommon(const std::string &name, bool disconnect, bool reliable, 
     if (disconnect) {
       // reconnect a follower, who maybe behind and
       // needs to receive a snapshot to catch up.
-      Logger::Debug(kDTest, -1, fmt::format("Connect with ShardKV {}", victim));
+      Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", victim));
       cfg.Connect(victim);
 
       cfg.One(common::RandInt(), servers, true);
@@ -67,9 +67,9 @@ static void SnapCommon(const std::string &name, bool disconnect, bool reliable, 
     }
 
     if (crash) {
-      Logger::Debug(kDTest, -1, fmt::format("Start the ShardKV {}", victim));
+      Logger::Debug(kDTest, -1, fmt::format("Start the Server {}", victim));
       cfg.Start(victim, cfg.GetApplierSnap());
-      Logger::Debug(kDTest, -1, fmt::format("Connect with ShardKV {}", victim));
+      Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", victim));
       cfg.Connect(victim);
 
       cfg.One(common::RandInt(), servers, true);
@@ -99,7 +99,7 @@ TEST(RaftSnapshotTest, InstallSnapshotsUnCrash) {
 // do the servers persist the snapshots, and
 // restart using snapshot along with the
 // tail of the log?
-TEST(RaftSnapshotTest, SnapshotAllCrash) {
+TEST(RaftSnapshotTest,SnapshotAllCrash) {
   auto servers = 3;
   auto iters = 5;
   Config<int> cfg{servers, false, true};
@@ -120,14 +120,14 @@ TEST(RaftSnapshotTest, SnapshotAllCrash) {
     // crash all
     for (int j = 0; j < servers; j++) {
       cfg.Crash(j);
-      Logger::Debug(kDTest, -1, fmt::format("Crash the ShardKV {}", j));
+      Logger::Debug(kDTest, -1, fmt::format("Crash the Server {}", j));
     }
 
     // revive all
     for (int j = 0; j < servers; j++) {
       cfg.Start(j, cfg.GetApplierSnap());
       cfg.Connect(j);
-      Logger::Debug(kDTest, -1, fmt::format("Start and Connect the ShardKV {}", j));
+      Logger::Debug(kDTest, -1, fmt::format("Start and Connect the Server {}", j));
     }
 
     auto index2 = cfg.One(common::RandInt(), servers, true);
@@ -152,14 +152,14 @@ TEST(RaftSnapshotTest, SnapshotInit) {
   // crash all
   for (int j = 0; j < servers; j++) {
     cfg.Crash(j);
-    Logger::Debug(kDTest, -1, fmt::format("Crash the ShardKV {}", j));
+    Logger::Debug(kDTest, -1, fmt::format("Crash the Server {}", j));
   }
 
   // revive all
   for (int j = 0; j < servers; j++) {
     cfg.Start(j, cfg.GetApplierSnap());
     cfg.Connect(j);
-    Logger::Debug(kDTest, -1, fmt::format("Start and Connect the ShardKV {}", j));
+    Logger::Debug(kDTest, -1, fmt::format("Start and Connect the Server {}", j));
   }
 
   // a single op, to get somthing to be written back to persistent storage
@@ -168,14 +168,14 @@ TEST(RaftSnapshotTest, SnapshotInit) {
   // crash all
   for (int j = 0; j < servers; j++) {
     cfg.Crash(j);
-    Logger::Debug(kDTest, -1, fmt::format("Crash the ShardKV {}", j));
+    Logger::Debug(kDTest, -1, fmt::format("Crash the Server {}", j));
   }
 
   // revive all
   for (int j = 0; j < servers; j++) {
     cfg.Start(j, cfg.GetApplierSnap());
     cfg.Connect(j);
-    Logger::Debug(kDTest, -1, fmt::format("Start and Connect the ShardKV {}", j));
+    Logger::Debug(kDTest, -1, fmt::format("Start and Connect the Server {}", j));
   }
 
   // do another op to trigger potential bug

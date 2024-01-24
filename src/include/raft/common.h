@@ -60,15 +60,15 @@ struct AppendEntryArgs {
 };
 
 struct AppendEntryReply {
-  int term_;  // the conflicting term
-  bool success_;
-  int xindex_;  // index of the first entry of the conflicting term
-  int xlen_;    // length of the follower's log
+  int term_{0};  // the conflicting term
+  bool success_{false};
+  int xindex_{0};  // index of the first entry of the conflicting term
+  int xlen_{0};    // length of the follower's log
 };
 
 struct AppendEntriesResult {
-  int last_log_idx_;  // index that the server is replicated upto
-  int server_;
+  int last_log_idx_{0};  // index that the server is replicated upto
+  int server_{-1};
 };
 
 struct ApplyMsg {
@@ -83,30 +83,30 @@ struct ApplyMsg {
 };
 
 struct RequestVoteArgs {
-  int term_;
-  int candidate_;
-  int last_log_index_;
-  int last_log_term_;
+  int term_{0};
+  int candidate_{-1};
+  int last_log_index_{0};
+  int last_log_term_{0};
 };
 
 struct RequestVoteReply {
-  int term_;
-  bool vote_granted_;
+  int term_{0};
+  bool vote_granted_{false};
 };
 
 struct VoteResult {
-  int server_;
-  int term_;
-  bool vote_granted_;
+  int server_{-1};
+  int term_{0};
+  bool vote_granted_{false};
 };
 
 enum class Role : uint8_t { RESERVED, LEADER, FOLLOWER, CANDIDATE };
 
 struct InternalState {
-  int last_log_index_;
-  int last_log_term_;
-  int term_;
-  Role role;
+  int last_log_index_{0};
+  int last_log_term_{0};
+  int term_{0};
+  Role role{Role::FOLLOWER};
 };
 
 struct InstallSnapshotArgs {

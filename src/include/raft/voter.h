@@ -64,10 +64,8 @@ class Voter : public std::enable_shared_from_this<Voter> {
   common::time_t last_heard_from_leader_;
   std::atomic<bool> give_up_{false};
   uint32_t me_;
-//  common::ThreadPool pool_;
 
   static constexpr int MAX_WAIT_TIME = 500;
-//  static constexpr int NUM_THREAD = 5;
 };
 
 }  // namespace kv::raft
