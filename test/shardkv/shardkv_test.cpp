@@ -22,7 +22,7 @@ bool Check(Clerk *ck, const std::string &key, const std::string &value) {
 }
 
 // test static 2-way sharding, without shard movement
-TEST(ShardKVTest, DISABLED_TestStaticShards) {
+TEST(ShardKVTest, TestStaticShards) {
   Logger::Debug(kDTest, -1, "Test: static shards ...");
 
   Config cfg(3, false, -1);
@@ -121,7 +121,7 @@ TEST(ShardKVTest, DISABLED_TestStaticShards) {
   EXPECT_TRUE(cfg.CleanUp());
 }
 
-TEST(ShardKVTest, DISABLED_TestJoinLeave) {
+TEST(ShardKVTest, TestJoinLeave) {
   Logger::Debug(kDTest, -1, "Test: join then leave");
 
   Config cfg(3, false, -1);
@@ -184,7 +184,7 @@ TEST(ShardKVTest, DISABLED_TestJoinLeave) {
   EXPECT_TRUE(cfg.CleanUp());
 }
 
-TEST(ShardKVTest, DISABLED_TestSnapshot) {
+TEST(ShardKVTest, TestSnapshot) {
   Logger::Debug(kDTest, -1, "Test: snapshots, join, and leave ...\n");
 
   Config cfg(3, false, 1000);
@@ -261,7 +261,7 @@ TEST(ShardKVTest, DISABLED_TestSnapshot) {
   EXPECT_TRUE(cfg.CleanUp());
 }
 
-TEST(ShardKVTest, DISABLED_TestMissChange) {
+TEST(ShardKVTest, TestMissChange) {
   Logger::Debug(kDTest, -1, "Test: servers miss configuration changes ...");
 
   Config cfg(3, false, 1000);
@@ -360,7 +360,7 @@ TEST(ShardKVTest, DISABLED_TestMissChange) {
   EXPECT_TRUE(cfg.CleanUp());
 }
 
-TEST(ShardKVTest, DISABLED_ConcurrentTest) {
+TEST(ShardKVTest, ConcurrentTest) {
   Logger::Debug(kDTest, -1, "Test: concurrent puts and configuration changes...\n");
 
   Config cfg(3, false, 100);
@@ -454,7 +454,7 @@ TEST(ShardKVTest, DISABLED_ConcurrentTest) {
   EXPECT_TRUE(cfg.CleanUp());
 }
 
-TEST(ShardKVTest, DISABLED_Unreliable) {
+TEST(ShardKVTest, Unreliable) {
   Logger::Debug(kDTest, -1, "Test: unreliable");
 
   Config cfg(3, true, 100);
@@ -504,7 +504,7 @@ TEST(ShardKVTest, DISABLED_Unreliable) {
   Logger::Debug(kDTest, -1, "  ... Passed\n");
 }
 
-TEST(ShardKVTest, Benchmark) {
+TEST(ShardKVTest, DISABLED_Benchmark) {
   Config cfg(3, true, -1);
   ON_SCOPE_EXIT { cfg.CleanUp(); };
 

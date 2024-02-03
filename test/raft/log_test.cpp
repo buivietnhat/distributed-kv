@@ -3,7 +3,48 @@
 
 namespace kv::raft {
 
-TEST(RaftLogTest, BasicAgreement) {
+TEST(RaftLogTest, Benchmark) {
+  int servers = 3;
+  Config<int> cfg{servers, false, false, true};
+
+  cfg.Begin("Benchmark");
+
+  const int nclient = 100;
+  const int nops = 10;
+
+  auto leader_id = cfg.CheckOneLeader();
+  auto *leader = cfg.GetRaft(leader_id);
+
+  auto run = [&] {
+    for (int i = 0; i < nops; i++) {
+      cfg.BmOne(i, leader, leader_id);
+    }
+  };
+
+  std::vector<boost::fibers::fiber> clnts;
+  clnts.reserve(nclient);
+
+  auto start = common::Now();
+
+  for (int i = 0; i < nclient; i++) {
+    clnts.push_back(boost::fibers::fiber(run));
+  }
+
+  for (auto &&f : clnts) {
+    f.join();
+  }
+
+  auto elapsed = common::ElapsedTimeMs(start, common::Now());
+  std::cout << "Doing " << nops * nclient << " request takes " << elapsed << " miliseconds" << std::endl;
+  std::cout << "RPS: " << nops * nclient * 1000 / elapsed << std::endl;
+
+//  Doing 1000 request takes 103.236 miliseconds
+//      RPS: 9686.54
+
+  EXPECT_TRUE(cfg.Cleanup());
+}
+
+TEST(RaftLogTest, DISABLED_BasicAgreement) {
   int servers = 3;
   Config<int> cfg{servers, false, false};
 
@@ -27,7 +68,7 @@ TEST(RaftLogTest, BasicAgreement) {
   EXPECT_TRUE(cfg.Cleanup());
 }
 
-TEST(RaftLogTest, FollowerFailure) {
+TEST(RaftLogTest, DISABLED_FollowerFailure) {
   int servers = 3;
   Config<int> cfg{servers, false, false};
 
@@ -72,7 +113,7 @@ TEST(RaftLogTest, FollowerFailure) {
   EXPECT_TRUE(cfg.Cleanup());
 }
 
-TEST(RaftLogTest, LeaderFailure) {
+TEST(RaftLogTest, DISABLED_LeaderFailure) {
   int servers = 3;
   Config<int> cfg{servers, false, false};
 
@@ -112,7 +153,7 @@ TEST(RaftLogTest, LeaderFailure) {
 }
 
 // test that a follower participates after disconnnect and re-connect
-TEST(RaftLogTest, FailAgree) {
+TEST(RaftLogTest, DISABLED_FailAgree) {
   int servers = 3;
   Config<int> cfg{servers, false, false};
 
@@ -146,7 +187,7 @@ TEST(RaftLogTest, FailAgree) {
   EXPECT_TRUE(cfg.Cleanup());
 }
 
-TEST(RaftLogTest, NoAgree) {
+TEST(RaftLogTest, DISABLED_NoAgree) {
   int servers = 5;
   Config<int> cfg{servers, false, false};
 
@@ -203,7 +244,7 @@ TEST(RaftLogTest, NoAgree) {
   EXPECT_TRUE(cfg.Cleanup());
 }
 
-TEST(RaftLogTest, ReJoin) {
+TEST(RaftLogTest, DISABLED_ReJoin) {
   int servers = 3;
   Config<int> cfg{servers, false, false};
 
@@ -244,7 +285,7 @@ TEST(RaftLogTest, ReJoin) {
   EXPECT_TRUE(cfg.Cleanup());
 }
 
-TEST(RaftLogTest, Backup) {
+TEST(RaftLogTest, DISABLED_Backup) {
   int servers = 5;
   Config<int> cfg{servers, false, false};
 

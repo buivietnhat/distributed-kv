@@ -8,9 +8,9 @@
 
 #include "common/container/concurrent_blocking_queue.h"
 #include "common/exception.h"
+#include "common/fiber_manager.h"
 #include "common/logger.h"
 #include "common/util.h"
-#include "common/fiber_manager.h"
 #include "network/network.h"
 #include "nlohmann/json.hpp"
 #include "raft/raft.h"
@@ -29,7 +29,8 @@ using common::Logger;
 template <typename CommandType>
 class Config {
  public:
-  Config(int num_servers, bool unreliable, bool snapshot, int num_worker = DEFAULT_NUM_WORKER) : ftm_(num_worker) {
+  Config(int num_servers, bool unreliable, bool snapshot, bool bm = false, int num_worker = DEFAULT_NUM_WORKER)
+      : ftm_(num_worker) {
     net_ = std::make_shared<network::Network>();
     num_servers_ = num_servers;
 
@@ -51,8 +52,10 @@ class Config {
     applier_t applier;
     if (snapshot) {
       applier = [&](int server_num, apply_channel_ptr apply_channel) { ApplierSnap(server_num, apply_channel); };
-    } else {
+    } else if (!bm) {
       applier = [&](int server_num, apply_channel_ptr apply_channel) { Applier(server_num, apply_channel); };
+    } else {
+      applier = [&](int server_num, apply_channel_ptr apply_channel) { BMApplier(server_num, apply_channel); };
     }
 
     for (int i = 0; i < num_servers_; i++) {
@@ -68,6 +71,11 @@ class Config {
   }
 
   ~Config() { Cleanup(); }
+
+  void WaitForLeaderCommited(int leader, int index) {
+    std::unique_lock l(mu_);
+    bm_cv_.wait(l, [&] { return logs_[leader].contains(index); });
+  }
 
   // how many servers think a log entry is commited?
   std::pair<int, std::any> NCommited(int index) {
@@ -132,6 +140,47 @@ class Config {
     return cmd;
   }
 
+  void BmOne(std::any cmd, Raft *rf, int leader) {
+//    auto starts = 0;
+    //    static int leader = -1;
+    //    raft::Raft *rf_leader{nullptr};
+    //    int index = -1;
+    auto [index, _, __] = rf->Start(cmd);
+    //        index = index1;
+
+    //    while (true) {
+    //      if (leader == -1) {
+    //        for (int si = 0; si < num_servers_; si++) {
+    //          starts = (starts + 1) % num_servers_;
+    //          raft::Raft *rf{nullptr};
+    //          std::unique_lock l(mu_);
+    //          if (connected_[starts]) {
+    //            rf = rafts_[starts].get();
+    //          }
+    //          l.unlock();
+    //          if (rf != nullptr) {
+    //            auto [index1, _, is_leader] = rf->Start(cmd);
+    //            if (is_leader) {
+    //              rf_leader = rf;
+    //              leader = si;
+    //              index = index1;
+    //              break;
+    //            }
+    //          }
+    //        }
+    //      } else {
+    //
+    //      }
+
+    //      if (leader != -1 && index != -1) {
+    WaitForLeaderCommited(leader, index);
+    //        return;
+    //      } else {
+    //        common::SleepMs(20);
+    //      }
+    //    }
+  }
+
   // do a complete agreement.
   int One(std::any cmd, int expected_server, bool retry) {
     auto t0 = common::Now();
@@ -148,8 +197,8 @@ class Config {
         }
         l.unlock();
         if (rf != nullptr) {
-          auto [index1, _, ok] = rf->Start(cmd);
-          if (ok) {
+          auto [index1, _, leader] = rf->Start(cmd);
+          if (leader) {
             index = index1;
             break;
           }
@@ -582,8 +631,30 @@ class Config {
     }
   }
 
+  void BMApplier(int server_num, apply_channel_ptr apply_ch) {
+    while (!apply_finished_[server_num]) {
+      raft::ApplyMsg m;
+      apply_ch->pop(m);
+      //      Logger::Debug(kDTrck, server_num, fmt::format("New index {} commited ", m.command_index_));
+      //      if (m.command_valid_ == false) {
+      //        // ignore
+      //      } else {
+      if (!apply_ch->is_closed()) {
+//        auto v = std::any_cast<CommandType>(m.command_);
+        std::unique_lock l(mu_);
+        logs_[server_num][m.command_index_] = {};
+        bm_cv_.notify_all();
+      }
+
+      //      }
+    }
+
+    Logger::Debug(kDTest, -1, fmt::format("BM Applier for server {} return", server_num));
+  }
+
   common::FiberThreadManager ftm_;
   boost::fibers::mutex mu_;
+  boost::fibers::condition_variable bm_cv_;
   bool finished_{false};
   std::vector<bool> apply_finished_;
   int num_servers_;

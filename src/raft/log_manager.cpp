@@ -117,12 +117,16 @@ void LogManager::CommitEntries(int start_idx, int from_idx, int to_idx) {
 
   std::lock_guard apply_lock(apply_mu_);
   std::unique_lock l(mu_);
-  if (commid_idx_ >= from_idx || from_idx < start_idx_) {
+  if (commid_idx_ >= to_idx || from_idx < start_idx_) {
     Logger::Debug(kDInfo, me_,
-                  "Someone has tried to commited the newer index or just installed snapshot, I should return now");
+                  fmt::format("Someone has tried to commited the newer index or just installed snapshot, I should "
+                              "return now, "
+                              "commitedidx = {}, from_idx = {}, start_idx = {}",
+                              commid_idx_, from_idx, start_idx));
     return;
   }
 
+  from_idx = std::max(from_idx, commid_idx_);
   auto entries = CopyLog(from_idx - start_idx_, to_idx - start_idx_);
   l.unlock();
 
@@ -240,9 +244,9 @@ bool LogManager::AppendEntries(const AppendEntryArgs &args, AppendEntryReply *re
     persister();
 
     // maybe I am just restart and lost the cmmit infomation
-    if (start_idx > from_commit_idx + 1) {
+    if (start_idx > from_commit_idx ) {
       Logger::Debug(kDSnap, me_,
-                    fmt::format("My StartIdx {} > CommitIdx {}, ApplySnap first", start_idx, from_commit_idx));
+                    fmt::format("My tartIdx {} > CommitIdx {}, ApplySnap first", start_idx, from_commit_idx - 1));
       ApplyLatestSnap();
 
       // update new FromCommitIdx and retry
