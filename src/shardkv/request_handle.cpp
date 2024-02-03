@@ -177,13 +177,13 @@ GetReply ShardKV::Get(const GetArgs &args) {
     return reply;
   }
 
-  if (status == std::future_status::timeout) {
+  if (status == boost::fibers::future_status::timeout) {
     Logger::Debug1(kDTrace, me_, gid_, "Get: Timeout (2s) waiting for the result");
     reply.err_ = Err::ERR_WRONG_LEADER;
     return reply;
   }
 
-  if (status == std::future_status::ready) {
+  if (status == boost::fibers::future_status::ready) {
     auto r = fut.get();
     if (r.wrong_group_) {
       reply.err_ = Err::ERR_WRONG_GROUP;
@@ -259,13 +259,13 @@ PutAppendReply ShardKV::PutAppend(const PutAppendArgs &args) {
     return reply;
   }
 
-  if (status == std::future_status::timeout) {
+  if (status == boost::fibers::future_status::timeout) {
     Logger::Debug1(kDTrace, me_, gid_, "Put/Append: Timeout (2s) waiting for the result");
     reply.err_ = Err::ERR_WRONG_LEADER;
     return reply;
   }
 
-  if (status == std::future_status::ready) {
+  if (status == boost::fibers::future_status::ready) {
     auto r = fut.get();
     if (r.wrong_group_) {
       reply.err_ = Err::ERR_WRONG_GROUP;
@@ -338,13 +338,13 @@ InstallShardReply ShardKV::InstallShard(const InstallShardArgs &args) {
     return reply;
   }
 
-  if (status == std::future_status::timeout) {
+  if (status == boost::fibers::future_status::timeout) {
     Logger::Debug1(kDTrace, me_, gid_, "InstallShard: Timeout (2s) waiting for the result");
     reply.err_ = Err::ERR_WRONG_LEADER;
     return reply;
   }
 
-  if (status == std::future_status::ready) {
+  if (status == boost::fibers::future_status::ready) {
     reply.err_ = Err::OK;
     return reply;
   }

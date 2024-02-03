@@ -7,6 +7,7 @@
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include <boost/fiber/all.hpp>
 
 namespace kv {
 
@@ -66,7 +67,7 @@ inline double ElapsedTimeS(time_t before, time_t after) {
   return elapsed_time.count();
 }
 
-inline void SleepMs(uint32_t duration) { std::this_thread::sleep_for(MS(duration)); }
+inline void SleepMs(uint32_t duration) { boost::this_fiber::sleep_for(MS(duration)); }
 
 inline std::vector<std::pair<int, int>> SortByValue(const std::unordered_map<int, int> &map) {
   std::vector<std::pair<int, int>> pairs;

@@ -18,8 +18,8 @@ TEST(RaftPersistTest, BasicPersist) {
   for (int i = 0; i < servers; i++) {
     cfg.Disconnect(i);
     cfg.Connect(i);
-    Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", i));
-    Logger::Debug(kDTest, -1, fmt::format("Connect with ShardKV {}", i));
+    Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", i));
+    Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", i));
   }
 
   cfg.One(12, servers, true);
@@ -47,13 +47,13 @@ TEST(RaftPersistTest, BasicPersist) {
 
   auto i3 = (cfg.CheckOneLeader() + 1) % servers;
   cfg.Disconnect(i3);
-  Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", i3));
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", i3));
 
   cfg.One(15, servers - 1, true);
 
   cfg.Start(i3, cfg.GetApplier());
   cfg.Connect(i3);
-  Logger::Debug(kDTest, -1, fmt::format("Restart and Connect to ShardKV {}", i3));
+  Logger::Debug(kDTest, -1, fmt::format("Restart and Connect to Server {}", i3));
 
   cfg.One(16, servers, true);
 
@@ -75,8 +75,8 @@ TEST(RaftPersistTest, MorePersistence) {
 
     cfg.Disconnect((leader1 + 1) % servers);
     cfg.Disconnect((leader1 + 2) % servers);
-    Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", (leader1 + 1) % servers));
-    Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", (leader1 + 2) % servers));
+    Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader1 + 1) % servers));
+    Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader1 + 2) % servers));
 
     cfg.One(10 + index, servers - 2, true);
     index++;
@@ -84,29 +84,29 @@ TEST(RaftPersistTest, MorePersistence) {
     cfg.Disconnect((leader1 + 0) % servers);
     cfg.Disconnect((leader1 + 3) % servers);
     cfg.Disconnect((leader1 + 4) % servers);
-    Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", (leader1 + 0) % servers));
-    Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", (leader1 + 3) % servers));
-    Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", (leader1 + 4) % servers));
+    Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader1 + 0) % servers));
+    Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader1 + 3) % servers));
+    Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader1 + 4) % servers));
 
     cfg.Start((leader1 + 1) % servers, cfg.GetApplier());
     cfg.Start((leader1 + 2) % servers, cfg.GetApplier());
     cfg.Connect((leader1 + 1) % servers);
     cfg.Connect((leader1 + 2) % servers);
-    Logger::Debug(kDTest, -1, fmt::format("Restart and Connect to ShardKV {}", (leader1 + 1) % servers));
-    Logger::Debug(kDTest, -1, fmt::format("Restart and Connect to ShardKV {}", (leader1 + 2) % servers));
+    Logger::Debug(kDTest, -1, fmt::format("Restart and Connect to Server {}", (leader1 + 1) % servers));
+    Logger::Debug(kDTest, -1, fmt::format("Restart and Connect to Server {}", (leader1 + 2) % servers));
 
     common::SleepMs(RAFT_ELECTION_TIMEOUT);
 
     cfg.Start((leader1 + 3) % servers, cfg.GetApplier());
     cfg.Connect((leader1 + 3) % servers);
-    Logger::Debug(kDTest, -1, fmt::format("Restart and Connect to ShardKV {}", (leader1 + 3) % servers));
+    Logger::Debug(kDTest, -1, fmt::format("Restart and Connect to Server {}", (leader1 + 3) % servers));
 
     cfg.One(10 + index, servers - 2, true);
 
     cfg.Connect((leader1 + 4) % servers);
     cfg.Connect((leader1 + 0) % servers);
-    Logger::Debug(kDTest, -1, fmt::format("Connect with ShardKV {}", (leader1 + 4) % servers));
-    Logger::Debug(kDTest, -1, fmt::format("Connect with ShardKV {}", (leader1 + 0) % servers));
+    Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", (leader1 + 4) % servers));
+    Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", (leader1 + 0) % servers));
   }
 
   cfg.One(1000, servers, true);
@@ -124,16 +124,16 @@ TEST(RaftPersistTest, PartitionedLeader) {
 
   auto leader = cfg.CheckOneLeader();
   cfg.Disconnect((leader + 2) % servers);
-  Logger::Debug(kDTest, -1, fmt::format("Disconnect with ShardKV {}", (leader + 2) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Disconnect with Server {}", (leader + 2) % servers));
 
   cfg.One(102, 2, true);
 
   cfg.Crash((leader + 0) % servers);
   cfg.Crash((leader + 1) % servers);
   Logger::Debug(kDTest, -1, fmt::format("Crash Leader {}", (leader + 0) % servers));
-  Logger::Debug(kDTest, -1, fmt::format("Crash ShardKV {}", (leader + 1) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Crash Server {}", (leader + 1) % servers));
   cfg.Connect((leader + 2) % servers);
-  Logger::Debug(kDTest, -1, fmt::format("Connect with ShardKV {}", (leader + 2) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Connect with Server {}", (leader + 2) % servers));
   cfg.Start((leader + 0) % servers, cfg.GetApplier());
   Logger::Debug(kDTest, -1, fmt::format("Start Leader {}", (leader + 0) % servers));
   cfg.Connect((leader + 0) % servers);
@@ -143,7 +143,7 @@ TEST(RaftPersistTest, PartitionedLeader) {
 
   cfg.Start((leader + 1) % servers, cfg.GetApplier());
   cfg.Connect((leader + 1) % servers);
-  Logger::Debug(kDTest, -1, fmt::format("Start and Connect ShardKV {}", (leader + 1) % servers));
+  Logger::Debug(kDTest, -1, fmt::format("Start and Connect Server {}", (leader + 1) % servers));
 
   cfg.One(104, servers, true);
 
@@ -187,7 +187,7 @@ TEST(RaftPersistTest, Figure8) {
 
     if (nup < 3) {
       auto s = common::RandInt() % servers;
-      Logger::Debug(kDTest, -1, fmt::format("Start and Connect ShardKV {}", s));
+      Logger::Debug(kDTest, -1, fmt::format("Start and Connect Server {}", s));
       if (cfg.GetRaft(s) == nullptr) {
         cfg.Start(s, cfg.GetApplier());
         cfg.Connect(s);
@@ -198,7 +198,7 @@ TEST(RaftPersistTest, Figure8) {
 
   for (int i = 0; i < servers; i++) {
     if (cfg.GetRaft(i) == nullptr) {
-      Logger::Debug(kDTest, -1, fmt::format("Start and Connect ShardKV {}", i));
+      Logger::Debug(kDTest, -1, fmt::format("Start and Connect Server {}", i));
       cfg.Start(i, cfg.GetApplier());
       cfg.Connect(i);
     }
@@ -220,7 +220,7 @@ TEST(RaftPersistTest, UnreliableAgree) {
   for (int iters = 0; iters < 50; iters++) {
     for (int j = 0; j < 4; j++) {
       count += 1;
-      std::thread([&, iters, j] {
+      boost::fibers::fiber([&, iters, j] {
         cfg.One(100 * iters + j, 1, true);
         count -= 1;
       }).detach();

@@ -8,12 +8,12 @@
 namespace kv::raft {
 
 Raft::Raft(std::vector<network::ClientEnd *> peers, uint32_t me,
-           std::shared_ptr<storage::PersistentInterface> persister, apply_ch_t apply_channel)
+           std::shared_ptr<storage::PersistentInterface> persister, apply_channel_ptr apply_channel)
     : peers_(peers), persister_(persister), me_(me) {
-//  Logger::Debug(kDTrace, me_, "....... Start .......");
+  //  Logger::Debug(kDTrace, me_, "....... Start .......");
 
-  voter_ = std::make_unique<Voter>(peers, me_);
-  lm_ = std::make_unique<LogManager>(me_, apply_channel);
+  voter_ = std::make_shared<Voter>(peers, me_);
+  lm_ = std::make_shared<LogManager>(me_, apply_channel);
 
   // initialize from state persisted before a crash
   auto state = persister_->ReadRaftState();
@@ -26,7 +26,7 @@ Raft::Raft(std::vector<network::ClientEnd *> peers, uint32_t me,
     ReadPersistSnap(*snap);
   }
 
-  tickert_ = std::thread([&] { Ticker(); });
+  tickert_ = boost::fibers::fiber([&] { Ticker(); });
 }
 
 Raft::~Raft() {
@@ -48,7 +48,7 @@ Raft::~Raft() {
 }
 
 RequestVoteReply Raft::RequestVote(const RequestVoteArgs &args) {
-  Logger::Debug(kDInfo, me_, fmt::format("Receive request vote from S{} for term {}", args.candidate_, args.term_));
+  Logger::Debug(kDVote, me_, fmt::format("Receive request vote from S{} for term {}", args.candidate_, args.term_));
   RequestVoteReply reply;
   std::unique_lock l(mu_);
   if (args.term_ < term_) {
@@ -176,12 +176,12 @@ void Raft::TransitionToLeader() {
   if (hbt_.joinable()) {
     hbt_.detach();
   }
-  hbt_ = std::thread([&] { BroadcastHeartBeats(); });
+  hbt_ = boost::fibers::fiber([&] { BroadcastHeartBeats(); });
 
   if (ldwlt_.joinable()) {
     ldwlt_.detach();
   }
-  ldwlt_ = std::thread([&] { LeaderWorkLoop(); });
+  ldwlt_ = boost::fibers::fiber([&] { LeaderWorkLoop(); });
 }
 
 void Raft::AttemptElection() {

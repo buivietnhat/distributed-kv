@@ -31,9 +31,7 @@ void Database::Append(const std::string &key, const std::string &value) {
   data_[shard][key] += value;
 }
 
-std::unordered_map<int, std::unordered_map<std::string, std::string>> Database::GetSnapShot() {
-  return data_;
-}
+std::unordered_map<int, std::unordered_map<std::string, std::string>> Database::GetSnapShot() { return data_; }
 
 void Database::SetSnapshot(const std::unordered_map<int, std::unordered_map<std::string, std::string>> &data) {
   data_ = data;
@@ -47,16 +45,10 @@ std::unordered_map<std::string, std::string> Database::GetShard(int shard) const
   return {};
 }
 
-void Database::SetShard(int shard, const std::unordered_map<std::string, std::string> &data) {
-  data_[shard] = data;
-}
+void Database::SetShard(int shard, const std::unordered_map<std::string, std::string> &data) { data_[shard] = data; }
 
-void Database::Lock() const {
-  mu_.lock();
-}
+void Database::Lock() const { mu_.lock(); }
 
-void Database::Unlock() const {
-  mu_.unlock();
-}
+void Database::Unlock() const { mu_.unlock(); }
 
 }  // namespace kv::shardkv

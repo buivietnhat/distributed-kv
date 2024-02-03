@@ -12,7 +12,7 @@
 
 namespace kv::shardkv {
 
-class ShardKV {
+class ShardKV : public std::enable_shared_from_this<ShardKV> {
  public:
   ShardKV(std::vector<network::ClientEnd *> servers, int me, std::shared_ptr<storage::PersistentInterface> persister,
           int maxraftstate, int gid, std::vector<network::ClientEnd *> ctrlers,
@@ -176,12 +176,12 @@ class ShardKV {
 
   void SendInstallShards(const std::vector<int> &shards, const shardctrler::ShardConfig &cfg);
 
-  common::ThreadRegistry thread_registry_;
+//  common::ThreadRegistry thread_registry_;
 
-  mutable std::mutex mu_;
+  mutable boost::fibers::mutex mu_;
   int me_;
-  std::unique_ptr<raft::Raft> rf_;
-  raft::apply_ch_t apply_ch_;
+  std::shared_ptr<raft::Raft> rf_;
+  raft::apply_channel_ptr apply_ch_;
   bool dead_{false};
   std::function<network::ClientEnd *(std::string)> make_end_;
   int gid_;
@@ -207,9 +207,9 @@ class ShardKV {
   std::unique_ptr<shardctrler::Clerk> mck_;
   std::unique_ptr<Clerk> kvcl_;
 
-  std::thread raft_applied_thread_;
-  std::thread observe_raft_thread_;
-  std::thread config_thread_;
+  boost::fibers::fiber raft_applied_thread_;
+  boost::fibers::fiber observe_raft_thread_;
+  boost::fibers::fiber config_thread_;
 
   std::shared_ptr<storage::PersistentInterface> persister_;
 };

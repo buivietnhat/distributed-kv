@@ -70,6 +70,7 @@ std::optional<VoteResult> Voter::DoRequestVote(std::shared_ptr<InternalState> st
   args.candidate_ = me_;
 
   auto reply = SendRequestVote(server, args);
+
   if (reply) {
     VoteResult result;
     result.term_ = reply->term_;
@@ -93,30 +94,34 @@ std::pair<bool, int> Voter::AttemptElection(std::shared_ptr<InternalState> state
   TryAgain();
 
   auto done = std::make_shared<bool>(false);
-  auto vote_channel = std::make_shared<common::ConcurrentBlockingQueue<VoteResult>>();
+  auto vote_channel = std::make_shared<boost::fibers::unbuffered_channel<VoteResult>>();
+
+  ON_SCOPE_EXIT {
+    *done = true;
+    vote_channel->close();
+  };
 
   for (size_t server = 0; server < peers_.size(); server++) {
     if (server != me_) {
-      pool_.AddTask([&, state, server, done, chan = vote_channel] {
-        auto vote_result = DoRequestVote(state, server);
+      boost::fibers::fiber([me = shared_from_this(), state, server, done, chan = vote_channel] {
+        auto vote_result = me->DoRequestVote(state, server);
         if (*done) {
           return;
         }
         if (vote_result) {
-          chan->Enqueue(*vote_result);
+          chan->push(*vote_result);
         } else {
-          chan->Enqueue({});
+          chan->push({});
         }
-      });
+      }).detach();
     }
   }
 
-  while (true) {
+  while (!Killed()) {
     VoteResult result;
-    vote_channel->Dequeue(&result);
+    vote_channel->pop(result);
 
     if (IsGaveUp() || Killed()) {
-      *done = true;
       Logger::Debug(kDVote, me_, "Well I have gave up or been Killed, I'm done with those election");
       VoteFor(-1);
       return {false, result.term_};
@@ -135,13 +140,11 @@ std::pair<bool, int> Voter::AttemptElection(std::shared_ptr<InternalState> state
     vote_finish += 1;
     if (vote_count > peers_.size() / 2) {
       Logger::Debug(kDVote, me_, fmt::format("I have collected enough vote now ({}), returning", vote_count));
-      *done = true;
       return {true, state->term_};
     }
 
     if (vote_finish == peers_.size()) {
       Logger::Debug(kDVote, me_, "Well I have tried by haven't collected enough vote, return...");
-      *done = true;
       break;
     }
   }

@@ -15,15 +15,16 @@ ShardCtrler::ShardCtrler(std::vector<network::ClientEnd *> servers, int me,
     : me_(me) {
   configs_.push_back({});
 
-  apply_ch_ = std::make_shared<common::ConcurrentBlockingQueue<raft::ApplyMsg>>();
-  rf_ = std::make_unique<raft::Raft>(std::move(servers), me, persister, apply_ch_);
+  apply_ch_ = std::make_shared<raft::apply_channel_t>();
+  rf_ = std::make_shared<raft::Raft>(std::move(servers), me, persister, apply_ch_);
 
   lot_ = std::make_unique<LastOpTable>();
 
-  raft_applied_thread_ = std::thread([&] { ListenFromRaft(); });
+  raft_applied_thread_ = boost::fibers::fiber([&] { ListenFromRaft(); });
 }
 
 ShardCtrler::~ShardCtrler() {
+  apply_ch_->close();
   if (raft_applied_thread_.joinable()) {
     raft_applied_thread_.join();
   }
@@ -89,13 +90,13 @@ JoinReply ShardCtrler::Join(const JoinArgs &args) {
     return reply;
   }
 
-  if (status == std::future_status::timeout) {
+  if (status == boost::fibers::future_status::timeout) {
     Logger::Debug(kDTrace, me_, "Join: Timeout (2s) waiting for the result");
     reply.wrong_leader_ = true;
     return reply;
   }
 
-  if (status == std::future_status::ready) {
+  if (status == boost::fibers::future_status::ready) {
     reply.err_ = OK;
     return reply;
   }
@@ -144,13 +145,13 @@ LeaveReply ShardCtrler::Leave(const LeaveArgs &args) {
     return reply;
   }
 
-  if (status == std::future_status::timeout) {
+  if (status == boost::fibers::future_status::timeout) {
     Logger::Debug(kDTrace, me_, "Leave: Timeout (2s) waiting for the result");
     reply.wrong_leader_ = true;
     return reply;
   }
 
-  if (status == std::future_status::ready) {
+  if (status == boost::fibers::future_status::ready) {
     reply.err_ = OK;
     return reply;
   }
@@ -199,13 +200,13 @@ MoveReply ShardCtrler::Move(const MoveArgs &args) {
     return reply;
   }
 
-  if (status == std::future_status::timeout) {
+  if (status == boost::fibers::future_status::timeout) {
     Logger::Debug(kDTrace, me_, "Move: Timeout (2s) waiting for the result");
     reply.wrong_leader_ = true;
     return reply;
   }
 
-  if (status == std::future_status::ready) {
+  if (status == boost::fibers::future_status::ready) {
     reply.err_ = OK;
     return reply;
   }
@@ -254,13 +255,13 @@ QueryReply ShardCtrler::Query(const QueryArgs &args) {
     return reply;
   }
 
-  if (status == std::future_status::timeout) {
+  if (status == boost::fibers::future_status::timeout) {
     Logger::Debug(kDTrace, me_, "Query: Timeout (2s) waiting for the result");
     reply.wrong_leader_ = true;
     return reply;
   }
 
-  if (status == std::future_status::ready) {
+  if (status == boost::fibers::future_status::ready) {
     reply.err_ = OK;
     reply.config_ = fut.get();
     return reply;
@@ -272,16 +273,20 @@ QueryReply ShardCtrler::Query(const QueryArgs &args) {
 void ShardCtrler::ListenFromRaft() {
   while (!Killed()) {
     raft::ApplyMsg m;
-    apply_ch_->Dequeue(&m);
+    apply_ch_->pop(m);
+    //    apply_ch_->Dequeue(&m);
+    //    InstallRaftAppliedMsg(m);
+    //    for (auto m : *apply_ch_) {
     InstallRaftAppliedMsg(m);
+    //    }
   }
 
   // dry all the cmd msgs
-  while (!apply_ch_->Empty()) {
-    raft::ApplyMsg m;
-    apply_ch_->Dequeue(&m);
-    InstallRaftAppliedMsg(m);
-  }
+  //  while (!apply_ch_->Empty()) {
+  //    raft::ApplyMsg m;
+  //    apply_ch_->Dequeue(&m);
+  //    InstallRaftAppliedMsg(m);
+  //  }
 }
 
 void ShardCtrler::InstallRaftAppliedMsg(const raft::ApplyMsg &m) {
@@ -309,7 +314,7 @@ void ShardCtrler::InstallCmdMsg(const Op &cmd) {
   // need to check if I've already served the request
   if (auto [served, _] = lot_->HasRequestBeenServed(cmd.client_id_, cmd.seq_number_); served) {
     Logger::Debug(kDDrop, me_,
-                  fmt::format("InstallCmdMsg: client %d with seq %d has already been served, return ...",
+                  fmt::format("InstallCmdMsg: client {} with seq {} has already been served, return ...",
                               cmd.client_id_ % kRound, cmd.seq_number_));
     if (cmd.sender_ == me_ && *cmd.p_has_value_ == false) {
       cmd.promise_->set_value(std::move(config));

@@ -65,12 +65,12 @@ void ShardKV::SendInstallConfig(const shardctrler::ShardConfig &cfg) {
     return;
   }
 
-  if (status == std::future_status::timeout) {
+  if (status == boost::fibers::future_status::timeout) {
     Logger::Debug(kDTrace, me_, "InstallConfig: Timeout (5s) waiting for the result");
     return;
   }
 
-  if (status == std::future_status::ready) {
+  if (status == boost::fibers::future_status::ready) {
     return;
   }
 
@@ -103,12 +103,12 @@ void ShardKV::SendRemoveShard(int shard, int config_num) {
     return;
   }
 
-  if (status == std::future_status::timeout) {
+  if (status == boost::fibers::future_status::timeout) {
     Logger::Debug(kDTrace, me_, "RemoveShard: Timeout (5s) waiting for the result");
     return;
   }
 
-  if (status == std::future_status::ready) {
+  if (status == boost::fibers::future_status::ready) {
     return;
   }
 
@@ -139,7 +139,7 @@ void ShardKV::SendInstallShard(int shard, int gid, const shardctrler::ShardConfi
         kDLeader1, me_, gid_,
         fmt::format("Reqest to install shard {} for Group {} config Num {} successfully", shard, gid, cfg.num_));
 
-    thread_registry_.RegisterNewThread([&, shard, cfg_num = std::move(cfg.num_)] { SendRemoveShard(shard, cfg_num); });
+    boost::fibers::fiber([me = shared_from_this(), shard, cfg_num = std::move(cfg.num_)] { me->SendRemoveShard(shard, cfg_num); }).detach();
   }
 }
 
@@ -264,12 +264,12 @@ void ShardKV::SendInstallShards(const std::vector<int> &shards, const shardctrle
     return;
   }
 
-  std::vector<std::thread> threads;
+  std::vector<boost::fibers::fiber> threads;
 
   for (auto shard : filter) {
     auto des_gid = cfg.shards_[shard];
 
-    threads.push_back(std::thread([&, shard, des_gid] { SendInstallShard(shard, des_gid, cfg); }));
+    threads.push_back(boost::fibers::fiber([&, shard, des_gid] { SendInstallShard(shard, des_gid, cfg); }));
   }
 
   for (auto &thread : threads) {

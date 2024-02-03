@@ -5,6 +5,7 @@
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
+#include <boost/fiber/all.hpp>
 
 #include "common/logger.h"
 #include "nlohmann/json.hpp"
@@ -107,7 +108,7 @@ struct Op {
   int gid_;                                                    // for move cmd
   int num_;                                                    // for query cmd
   std::shared_ptr<bool> p_has_value_;
-  std::shared_ptr<std::promise<ShardConfig>> promise_;
+  std::shared_ptr<boost::fibers::promise<ShardConfig>> promise_;
 };
 
 Op GenerateJoinOp(int sender, const JoinArgs &args);

@@ -1,7 +1,6 @@
 #pragma once
 
-#include <tbb/task_group.h>
-
+#include <boost/fiber/all.hpp>
 #include <future>
 #include <iostream>
 #include <mutex>
@@ -24,6 +23,8 @@ using namespace std::chrono_literals;
 
 namespace kv::network {
 
+static constexpr int kTimeout = 10000;
+
 using RequestArgs =
     std::variant<int, raft::RequestVoteArgs, raft::AppendEntryArgs, raft::InstallSnapshotArgs, shardctrler::JoinArgs,
                  shardctrler::LeaveArgs, shardctrler::MoveArgs, shardctrler::QueryArgs, shardkv::PutAppendArgs,
@@ -41,16 +42,17 @@ struct ReplyMessage {
 struct RequestMessage {
   std::string endname_;
   RequestArgs args_;
-  common::Channel<ReplyMessage> *chan_;
+  std::shared_ptr<boost::fibers::unbuffered_channel<ReplyMessage>> chan_;
 
-  RequestMessage(std::string endname, RequestArgs args, common::Channel<ReplyMessage> *chan)
+  RequestMessage(std::string endname, RequestArgs args,
+                 std::shared_ptr<boost::fibers::unbuffered_channel<ReplyMessage>> chan)
       : endname_(std::move(endname)), args_(std::move(args)), chan_(chan) {}
 
   RequestMessage() = default;
 };
 
 struct Server {
-  std::mutex mu_;
+  boost::fibers::mutex mu_;
   raft::Raft *raft_;
   std::shared_ptr<shardctrler::ShardCtrler> shardctrler_;
   std::shared_ptr<shardkv::ShardKV> shardkv_;
@@ -181,7 +183,8 @@ struct Server {
 
 class MockingClientEnd : public ClientEnd {
  public:
-  MockingClientEnd(std::string name, common::Channel<RequestMessage> &chan) : endname_(std::move(name)), chan_(chan) {}
+  MockingClientEnd(std::string name, boost::fibers::unbuffered_channel<RequestMessage> &chan)
+      : endname_(std::move(name)), chan_(chan) {}
 
   std::optional<raft::RequestVoteReply> RequestVote(const raft::RequestVoteArgs &args) const override {
     // entire Network has been destroyed
@@ -189,11 +192,12 @@ class MockingClientEnd : public ClientEnd {
       return {};
     }
 
-    common::Channel<ReplyMessage> chan;
-    RequestMessage req_msg{endname_, args, &chan};
-    chan_.Send(req_msg);
+    auto chan = std::make_shared<boost::fibers::unbuffered_channel<ReplyMessage>>();
+    RequestMessage req_msg{endname_, args, chan};
+    chan_.push(req_msg);
 
-    auto reply = req_msg.chan_->Receive();
+    ReplyMessage reply;
+    req_msg.chan_->pop_wait_for(reply, MS(kTimeout));
     if (reply.ok_) {
       return std::get<raft::RequestVoteReply>(reply.args_);
     }
@@ -207,11 +211,12 @@ class MockingClientEnd : public ClientEnd {
       return {};
     }
 
-    common::Channel<ReplyMessage> chan;
-    RequestMessage req_msg{endname_, args, &chan};
-    chan_.Send(req_msg);
+    auto chan = std::make_shared<boost::fibers::unbuffered_channel<ReplyMessage>>();
+    RequestMessage req_msg{endname_, args, chan};
+    chan_.push(req_msg);
 
-    auto reply = req_msg.chan_->Receive();
+    ReplyMessage reply;
+    req_msg.chan_->pop_wait_for(reply, MS(kTimeout));
     if (reply.ok_) {
       return std::get<raft::AppendEntryReply>(reply.args_);
     }
@@ -224,11 +229,12 @@ class MockingClientEnd : public ClientEnd {
       return {};
     }
 
-    common::Channel<ReplyMessage> chan;
-    RequestMessage req_msg{endname_, args, &chan};
-    chan_.Send(req_msg);
+    auto chan = std::make_shared<boost::fibers::unbuffered_channel<ReplyMessage>>();
+    RequestMessage req_msg{endname_, args, chan};
+    chan_.push(req_msg);
 
-    auto reply = req_msg.chan_->Receive();
+    ReplyMessage reply;
+    req_msg.chan_->pop_wait_for(reply, MS(kTimeout));
     if (reply.ok_) {
       return std::get<raft::InstallSnapshotReply>(reply.args_);
     }
@@ -241,12 +247,12 @@ class MockingClientEnd : public ClientEnd {
       return {};
     }
 
-    common::Channel<ReplyMessage> chan;
+    auto chan = std::make_shared<boost::fibers::unbuffered_channel<ReplyMessage>>();
+    RequestMessage req_msg{endname_, args, chan};
+    chan_.push(req_msg);
 
-    RequestMessage req_msg{endname_, args, &chan};
-    chan_.Send(req_msg);
-
-    auto reply = req_msg.chan_->Receive();
+    ReplyMessage reply;
+    req_msg.chan_->pop_wait_for(reply, MS(kTimeout));
     if (reply.ok_) {
       return std::get<shardctrler::QueryReply>(reply.args_);
     }
@@ -259,11 +265,12 @@ class MockingClientEnd : public ClientEnd {
       return {};
     }
 
-    common::Channel<ReplyMessage> chan;
-    RequestMessage req_msg{endname_, args, &chan};
-    chan_.Send(req_msg);
+    auto chan = std::make_shared<boost::fibers::unbuffered_channel<ReplyMessage>>();
+    RequestMessage req_msg{endname_, args, chan};
+    chan_.push(req_msg);
 
-    auto reply = req_msg.chan_->Receive();
+    ReplyMessage reply;
+    req_msg.chan_->pop_wait_for(reply, MS(kTimeout));
     if (reply.ok_) {
       return std::get<shardctrler::JoinReply>(reply.args_);
     }
@@ -276,11 +283,12 @@ class MockingClientEnd : public ClientEnd {
       return {};
     }
 
-    common::Channel<ReplyMessage> chan;
-    RequestMessage req_msg{endname_, args, &chan};
-    chan_.Send(req_msg);
+    auto chan = std::make_shared<boost::fibers::unbuffered_channel<ReplyMessage>>();
+    RequestMessage req_msg{endname_, args, chan};
+    chan_.push(req_msg);
 
-    auto reply = req_msg.chan_->Receive();
+    ReplyMessage reply;
+    req_msg.chan_->pop_wait_for(reply, MS(kTimeout));
     if (reply.ok_) {
       return std::get<shardctrler::LeaveReply>(reply.args_);
     }
@@ -293,11 +301,12 @@ class MockingClientEnd : public ClientEnd {
       return {};
     }
 
-    common::Channel<ReplyMessage> chan;
-    RequestMessage req_msg{endname_, args, &chan};
-    chan_.Send(req_msg);
+    auto chan = std::make_shared<boost::fibers::unbuffered_channel<ReplyMessage>>();
+    RequestMessage req_msg{endname_, args, chan};
+    chan_.push(req_msg);
 
-    auto reply = req_msg.chan_->Receive();
+    ReplyMessage reply;
+    req_msg.chan_->pop_wait_for(reply, MS(kTimeout));
     if (reply.ok_) {
       return std::get<shardctrler::MoveReply>(reply.args_);
     }
@@ -310,11 +319,12 @@ class MockingClientEnd : public ClientEnd {
       return {};
     }
 
-    common::Channel<ReplyMessage> chan;
-    RequestMessage req_msg{endname_, args, &chan};
-    chan_.Send(req_msg);
+    auto chan = std::make_shared<boost::fibers::unbuffered_channel<ReplyMessage>>();
+    RequestMessage req_msg{endname_, args, chan};
+    chan_.push(req_msg);
 
-    auto reply = req_msg.chan_->Receive();
+    ReplyMessage reply;
+    req_msg.chan_->pop_wait_for(reply, MS(kTimeout));
     if (reply.ok_) {
       return std::get<shardkv::GetReply>(reply.args_);
     }
@@ -327,11 +337,12 @@ class MockingClientEnd : public ClientEnd {
       return {};
     }
 
-    common::Channel<ReplyMessage> chan;
-    RequestMessage req_msg{endname_, args, &chan};
-    chan_.Send(req_msg);
+    auto chan = std::make_shared<boost::fibers::unbuffered_channel<ReplyMessage>>();
+    RequestMessage req_msg{endname_, args, chan};
+    chan_.push(req_msg);
 
-    auto reply = req_msg.chan_->Receive();
+    ReplyMessage reply;
+    req_msg.chan_->pop_wait_for(reply, MS(kTimeout));
     if (reply.ok_) {
       return std::get<shardkv::PutAppendReply>(reply.args_);
     }
@@ -344,11 +355,12 @@ class MockingClientEnd : public ClientEnd {
       return {};
     }
 
-    common::Channel<ReplyMessage> chan;
-    RequestMessage req_msg{endname_, args, &chan};
-    chan_.Send(req_msg);
+    auto chan = std::make_shared<boost::fibers::unbuffered_channel<ReplyMessage>>();
+    RequestMessage req_msg{endname_, args, chan};
+    chan_.push(req_msg);
 
-    auto reply = req_msg.chan_->Receive();
+    ReplyMessage reply;
+    req_msg.chan_->pop_wait_for(reply, MS(kTimeout));
     if (reply.ok_) {
       return std::get<shardkv::InstallShardReply>(reply.args_);
     }
@@ -362,11 +374,12 @@ class MockingClientEnd : public ClientEnd {
       return {};
     }
 
-    common::Channel<ReplyMessage> chan;
-    RequestMessage req_msg{endname_, input, &chan};
-    chan_.Send(req_msg);
+    auto chan = std::make_shared<boost::fibers::unbuffered_channel<ReplyMessage>>();
+    RequestMessage req_msg{endname_, input, chan};
+    chan_.push(req_msg);
 
-    auto reply = req_msg.chan_->Receive();
+    ReplyMessage reply;
+    req_msg.chan_->pop_wait_for(reply, MS(kTimeout));
     if (reply.ok_) {
       return std::get<int>(reply.args_);
     }
@@ -378,13 +391,13 @@ class MockingClientEnd : public ClientEnd {
 
  private:
   std::string endname_;
-  common::Channel<RequestMessage> &chan_;
+  boost::fibers::unbuffered_channel<RequestMessage> &chan_;
   bool finished_{false};
 };
 
-class Network {
+class Network : public std::enable_shared_from_this<Network> {
  public:
-  explicit Network() { dp_thread_ = std::thread(&Network::DispatchRequests, this); }
+  explicit Network() { dp_thread_ = boost::fibers::fiber(&Network::DispatchRequests, this); }
 
   ~Network() { Cleanup(); }
 
@@ -440,7 +453,7 @@ class Network {
       // stop receiving messages
       ShutdownClientEnds();
 
-      chan_.Close();
+      chan_.close();
       dp_thread_.join();
     }
   }
@@ -450,12 +463,16 @@ class Network {
  private:
   void DispatchRequests() {
     while (!finished_) {
-      auto req = chan_.Receive();
+      RequestMessage req;
+      chan_.pop(req);
 
       if (req.chan_ == nullptr) {
         continue;
       }
-      tr_.RegisterNewThread([&, req = std::move(req)] { ProcessRequest(std::move(req)); });
+
+      boost::fibers::fiber([me = shared_from_this(), req = std::move(req)] {
+        me->ProcessRequest(std::move(req));
+      }).detach();
     }
   }
 
@@ -474,12 +491,12 @@ class Network {
       if (!reliable) {
         // short delay
         auto ms = common::RandInt() % 27;
-        std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+        boost::this_fiber::sleep_for(std::chrono::milliseconds(ms));
       }
 
       if (!reliable && (common::RandInt() % 1000 < 100)) {
         // drop the request, return as if timeout
-        req.chan_->Send({});
+        req.chan_->push({});
         return;
       }
 
@@ -487,17 +504,19 @@ class Network {
       // we can periodically check if the server has been killed and the RPC should
       // get a failure reply
       ReplyMessage reply;
-      std::mutex m;
-      std::condition_variable cond;
+      boost::fibers::mutex m;
+      boost::fibers::condition_variable cond;
       auto reply_ok = std::make_shared<bool>(false);
       auto is_server_dead = std::make_shared<bool>(false);
 
-      auto fut1 = std::async(std::launch::async, [&, reply_ok, server = server] {
+      boost::fibers::fiber f([&, reply_ok, server = server] {
         reply = server->DispatchReq(req);
         std::lock_guard l(m);
         *reply_ok = true;
         cond.notify_one();
       });
+
+      ON_SCOPE_EXIT { f.join(); };
 
       *is_server_dead = IsServerDead(req.endname_, servername, server.get());
 
@@ -515,17 +534,17 @@ class Network {
 
       if (*reply_ok == false || *is_server_dead == true) {
         // server was killed while we were waiting; return error
-        req.chan_->Send({});
+        req.chan_->push({});
       } else if (reliable == false && (common::RandInt() % 1000) < 100) {
         // drop the reply, return as if timeout
-        req.chan_->Send({});
+        req.chan_->push({});
       } else if (longreordering == true && common::RandNInt(900) < 600) {
         // delay the response for a while
         auto ms = 200 + common::RandNInt(1 + common::RandNInt(2000));
-        std::this_thread::sleep_for(std::chrono::milliseconds(ms));
-        req.chan_->Send(reply);
+        boost::this_fiber::sleep_for(std::chrono::milliseconds(ms));
+        req.chan_->push(reply);
       } else {
-        req.chan_->Send(reply);
+        req.chan_->push(reply);
       }
     } else {
       // simulate no reply and eventual timeout
@@ -535,8 +554,8 @@ class Network {
       } else {
         ms = common::RandInt() % 100;
       }
-      std::this_thread::sleep_for(std::chrono::milliseconds(ms));
-      req.chan_->Send({});
+      boost::this_fiber::sleep_for(std::chrono::milliseconds(ms));
+      req.chan_->push({});
     }
   }
 
@@ -564,7 +583,7 @@ class Network {
     return false;
   }
 
-  std::mutex mu_;
+  boost::fibers::mutex mu_;
   bool reliable_{true};
   bool long_delay_{false};
   bool long_reordering_{false};
@@ -572,10 +591,10 @@ class Network {
   std::unordered_map<std::string, bool> enabled_;
   std::unordered_map<std::string, std::shared_ptr<Server>> servers_;
   std::unordered_map<std::string, std::string> connections_;  // endname -> server name
-  common::Channel<RequestMessage> chan_;
-  std::thread dp_thread_;
+  boost::fibers::unbuffered_channel<RequestMessage> chan_;
+  boost::fibers::fiber dp_thread_;
   bool finished_{false};
-  common::ThreadRegistry tr_;
+  //  common::ThreadRegistry tr_;
 };
 
 }  // namespace kv::network

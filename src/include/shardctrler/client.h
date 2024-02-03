@@ -23,7 +23,7 @@ class Clerk {
 
  private:
   std::vector<network::ClientEnd *> servers_;
-  std::mutex mu_;
+  boost::fibers::mutex mu_;
   uint64_t uuid_;
   uint64_t seq_number_;
   bool dead_{false};

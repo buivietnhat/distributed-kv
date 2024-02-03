@@ -4,6 +4,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <boost/fiber/all.hpp>
 
 namespace kv::shardkv {
 
@@ -30,7 +31,7 @@ class Database {
 
  private:
   std::unordered_map<int, std::unordered_map<std::string, std::string>> data_;  // shardid -> {key-value}
-  mutable std::mutex mu_;
+  mutable boost::fibers::mutex mu_;
 };
 
 }  // namespace kv::shardkv

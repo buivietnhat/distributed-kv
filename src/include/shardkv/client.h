@@ -35,7 +35,7 @@ class Clerk {
   // turns a server name into a ClientEnd on which we can send RPCs
   std::function<network::ClientEnd *(std::string)> make_end_;
 
-  std::mutex mu_;
+  boost::fibers::mutex mu_;
   uint64_t uuid_;
   uint64_t seq_number_;
   bool dead_{false};

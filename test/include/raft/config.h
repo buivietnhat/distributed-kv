@@ -10,6 +10,7 @@
 #include "common/exception.h"
 #include "common/logger.h"
 #include "common/util.h"
+#include "common/fiber_manager.h"
 #include "network/network.h"
 #include "nlohmann/json.hpp"
 #include "raft/raft.h"
@@ -21,17 +22,15 @@ namespace kv::raft {
 
 static constexpr int RAFT_ELECTION_TIMEOUT = 1000;
 static constexpr int SNAPSHOT_INTERVAL = 10;
-static constexpr int MAXLOGSIZE = 2000;
+static constexpr int MAXLOGSIZE = 20000;
 
 using common::Logger;
 
 template <typename CommandType>
 class Config {
-  using applier_t = std::function<void(int, std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>>)>;
-
  public:
-  Config(int num_servers, bool unreliable, bool snapshot) {
-    net_ = std::make_unique<network::Network>();
+  Config(int num_servers, bool unreliable, bool snapshot, int num_worker = DEFAULT_NUM_WORKER) : ftm_(num_worker) {
+    net_ = std::make_shared<network::Network>();
     num_servers_ = num_servers;
 
     rafts_.resize(num_servers);
@@ -51,13 +50,9 @@ class Config {
 
     applier_t applier;
     if (snapshot) {
-      applier = [&](int server_num, std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>> apply_channel) {
-        ApplierSnap(server_num, apply_channel);
-      };
+      applier = [&](int server_num, apply_channel_ptr apply_channel) { ApplierSnap(server_num, apply_channel); };
     } else {
-      applier = [&](int server_num, std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>> apply_channel) {
-        Applier(server_num, apply_channel);
-      };
+      applier = [&](int server_num, apply_channel_ptr apply_channel) { Applier(server_num, apply_channel); };
     }
 
     for (int i = 0; i < num_servers_; i++) {
@@ -299,19 +294,19 @@ class Config {
 
     if (apply_threads_[server_num].joinable()) {
       apply_finished_[server_num] = true;
-      apply_chs_[server_num]->Enqueue({});
+      apply_chs_[server_num]->close();
       apply_threads_[server_num].join();
       apply_finished_[server_num] = false;
     }
 
-    apply_chs_[server_num] = std::make_shared<common::ConcurrentBlockingQueue<raft::ApplyMsg>>();
+    apply_chs_[server_num] = std::make_shared<raft::apply_channel_t>();
     auto rf = std::make_unique<Raft>(std::move(ends), server_num, saved_[server_num], apply_chs_[server_num]);
 
     mu_.lock();
     rafts_[server_num] = std::move(rf);
     mu_.unlock();
 
-    apply_threads_[server_num] = std::thread(applier, server_num, apply_chs_[server_num]);
+    apply_threads_[server_num] = boost::fibers::fiber(applier, server_num, apply_chs_[server_num]);
 
     auto server = std::make_unique<network::Server>();
     server->AddRaft(rafts_[server_num].get());
@@ -341,7 +336,7 @@ class Config {
 
       // wake up all the apply channels to finish the thread
       for (auto &apply_ch : apply_chs_) {
-        apply_ch->Enqueue({});
+        apply_ch->close();
       }
       for (auto &thread : apply_threads_) {
         thread.join();
@@ -366,7 +361,7 @@ class Config {
   int CheckOneLeader() const {
     for (int iters = 0; iters < 10; iters++) {
       auto ms = 450 + common::RandInt() % 100;
-      std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+      boost::this_fiber::sleep_for(std::chrono::milliseconds(ms));
 
       std::unordered_map<int, std::vector<int>> leaders_map;
       for (int i = 0; i < num_servers_; i++) {
@@ -428,16 +423,12 @@ class Config {
     return true;
   }
 
-  inline std::function<void(int, std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>>)> GetApplier() {
-    return [&](int server_num, std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>> apply_channel) {
-      Applier(server_num, apply_channel);
-    };
+  inline raft::applier_t GetApplier() {
+    return [&](int server_num, apply_channel_ptr apply_channel) { Applier(server_num, apply_channel); };
   }
 
-  inline std::function<void(int, std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>>)> GetApplierSnap() {
-    return [&](int server_num, std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>> apply_channel) {
-      ApplierSnap(server_num, apply_channel);
-    };
+  inline raft::applier_t GetApplierSnap() {
+    return [&](int server_num, apply_channel_ptr apply_channel) { ApplierSnap(server_num, apply_channel); };
   }
 
   // Maximum log size across all servers
@@ -504,7 +495,7 @@ class Config {
     return {err_msg, prevok};
   }
 
-  void ApplierSnap(int server_num, std::shared_ptr<common::ConcurrentBlockingQueue<raft::ApplyMsg>> apply_ch) {
+  void ApplierSnap(int server_num, apply_channel_ptr apply_ch) {
     std::unique_lock l(mu_);
     auto rf = rafts_[server_num].get();
     l.unlock();
@@ -515,7 +506,7 @@ class Config {
 
     while (!apply_finished_[server_num]) {
       raft::ApplyMsg m;
-      apply_ch->Dequeue(&m);
+      apply_ch->pop(m);
       std::string err_msg = "";
       if (m.snapshot_valid_) {
         l.lock();
@@ -569,10 +560,10 @@ class Config {
     }
   }
 
-  void Applier(int server_num, std::shared_ptr<common::ConcurrentBlockingQueue<raft::ApplyMsg>> apply_ch) {
+  void Applier(int server_num, apply_channel_ptr apply_ch) {
     while (!apply_finished_[server_num]) {
       raft::ApplyMsg m;
-      apply_ch->Dequeue(&m);
+      apply_ch->pop(m);
       if (m.command_valid_ == false) {
         // ignore
       } else {
@@ -591,11 +582,12 @@ class Config {
     }
   }
 
-  std::mutex mu_;
+  common::FiberThreadManager ftm_;
+  boost::fibers::mutex mu_;
   bool finished_{false};
   std::vector<bool> apply_finished_;
   int num_servers_;
-  std::unique_ptr<network::Network> net_;
+  std::shared_ptr<network::Network> net_;
   std::vector<std::shared_ptr<Raft>> rafts_;
   std::vector<bool> connected_;
   std::vector<std::vector<std::string>> endnames_;
@@ -606,8 +598,10 @@ class Config {
   common::time_t start_;  // time at which the Config constructor was called
   int max_index_{0};
   std::vector<std::string> apply_err_;
-  std::vector<std::shared_ptr<common::ConcurrentBlockingQueue<raft::ApplyMsg>>> apply_chs_;
-  std::vector<std::thread> apply_threads_;
+  std::vector<apply_channel_ptr> apply_chs_;
+  std::vector<boost::fibers::fiber> apply_threads_;
+
+  static constexpr int DEFAULT_NUM_WORKER = 4;
 };
 
 }  // namespace kv::raft

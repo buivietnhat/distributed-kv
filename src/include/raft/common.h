@@ -3,6 +3,7 @@
 #include <any>
 #include <string>
 #include <vector>
+#include <boost/fiber/all.hpp>
 
 #include "common/container/concurrent_blocking_queue.h"
 #include "common/logger.h"
@@ -10,6 +11,8 @@
 namespace kv::raft {
 
 using common::Logger;
+
+
 
 struct LogEntry {
   int term_;
@@ -46,26 +49,26 @@ struct Snapshot {
 };
 
 struct AppendEntryArgs {
-  bool hearbeat_;
-  bool commit_;
-  int leader_id_;
-  int leader_term_;
-  int prev_log_idx_;
-  int prev_log_term_;
-  int leader_commit_idx_;
+  bool hearbeat_{false};
+  bool commit_{false};
+  int leader_id_{-1};
+  int leader_term_{-1};
+  int prev_log_idx_{-1};
+  int prev_log_term_{-1};
+  int leader_commit_idx_{-1};
   std::vector<LogEntry> entries_;
 };
 
 struct AppendEntryReply {
-  int term_;  // the conflicting term
-  bool success_;
-  int xindex_;  // index of the first entry of the conflicting term
-  int xlen_;    // length of the follower's log
+  int term_{0};  // the conflicting term
+  bool success_{false};
+  int xindex_{0};  // index of the first entry of the conflicting term
+  int xlen_{0};    // length of the follower's log
 };
 
 struct AppendEntriesResult {
-  int last_log_idx_;  // index that the server is replicated upto
-  int server_;
+  int last_log_idx_{0};  // index that the server is replicated upto
+  int server_{-1};
 };
 
 struct ApplyMsg {
@@ -80,30 +83,30 @@ struct ApplyMsg {
 };
 
 struct RequestVoteArgs {
-  int term_;
-  int candidate_;
-  int last_log_index_;
-  int last_log_term_;
+  int term_{0};
+  int candidate_{-1};
+  int last_log_index_{0};
+  int last_log_term_{0};
 };
 
 struct RequestVoteReply {
-  int term_;
-  bool vote_granted_;
+  int term_{0};
+  bool vote_granted_{false};
 };
 
 struct VoteResult {
-  int server_;
-  int term_;
-  bool vote_granted_;
+  int server_{-1};
+  int term_{0};
+  bool vote_granted_{false};
 };
 
 enum class Role : uint8_t { RESERVED, LEADER, FOLLOWER, CANDIDATE };
 
 struct InternalState {
-  int last_log_index_;
-  int last_log_term_;
-  int term_;
-  Role role;
+  int last_log_index_{0};
+  int last_log_term_{0};
+  int term_{0};
+  Role role{Role::FOLLOWER};
 };
 
 struct InstallSnapshotArgs {
@@ -133,6 +136,9 @@ inline std::string ToString(Role role) {
   }
 }
 
-using apply_ch_t = std::shared_ptr<common::ConcurrentBlockingQueue<ApplyMsg>>;
+
+using apply_channel_t = boost::fibers::unbuffered_channel<ApplyMsg>;
+using apply_channel_ptr = std::shared_ptr<apply_channel_t>;
+using applier_t = std::function<void(int, apply_channel_ptr)>;
 
 }  // namespace kv::raft

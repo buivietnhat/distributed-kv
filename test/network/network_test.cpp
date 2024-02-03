@@ -67,7 +67,7 @@ TEST(NetworkTest, TestConcurrentMany) {
   common::Channel<int> ch;
 
   for (int ii = 0; ii < nclients; ii++) {
-    std::thread([&, ii] {
+    boost::fibers::thread([&, ii] {
       auto i = std::to_string(ii);
       int n = 0;
       auto e = rn.MakeEnd(i);
@@ -109,7 +109,7 @@ TEST(NetworkTest, TestUnreliable) {
   common::Channel<int> ch;
   int nclients = 300;
   for (int ii = 0; ii < nclients; ii++) {
-    std::thread([&, ii] {
+    boost::fibers::thread([&, ii] {
       auto i = std::to_string(ii);
       int n = 0;
       auto e = rn.MakeEnd(i);
@@ -155,7 +155,7 @@ TEST(NetworkTest, TestConcurrentOne) {
   common::Channel<int> ch;
   int nrpcs = 20;
   for (int ii = 0; ii < nrpcs; ii++) {
-    std::thread([&, ii] {
+    boost::fibers::thread([&, ii] {
       auto i = std::to_string(ii);
       int n = 0;
 
@@ -200,7 +200,7 @@ TEST(NetworkTest, TestRegression) {
   common::Channel<bool> ch;
   int nrpcs = 20;
   for (int ii = 0; ii < nrpcs; ii++) {
-    std::thread([&, ii] {
+    boost::fibers::thread([&, ii] {
       auto i = std::to_string(ii);
       bool ok = false;
 
@@ -260,7 +260,7 @@ TEST(NetworkTest, DISABLED_TestKilled) {
   rn.Enable("end1-99", true);
 
   common::Channel<bool> ch;
-  std::thread([&] {
+  boost::fibers::thread([&] {
     auto rep = e->Test(99);
     if (rep) {
       ch.Send(true);
@@ -271,7 +271,7 @@ TEST(NetworkTest, DISABLED_TestKilled) {
 
   common::SleepMs(1000);
   bool ok = false;
-  std::thread([&] {
+  boost::fibers::thread([&] {
     common::SleepMs(100);
     ok = true;
   }).detach();
@@ -283,7 +283,7 @@ TEST(NetworkTest, DISABLED_TestKilled) {
 
   rn.DeleteServer("server99");
   ok = true;
-  std::thread([&] {
+  boost::fibers::thread([&] {
     common::SleepMs(100);
     ok = false;
   }).detach();

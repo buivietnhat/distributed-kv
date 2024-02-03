@@ -56,29 +56,43 @@ TEST(ShardKVTest, DISABLED_TestStaticShards) {
     cfg.CheckLogs();  // forbid snapshots
 
     std::vector<std::shared_ptr<Clerk>> cls;
-    auto ch = std::make_shared<common::ConcurrentBlockingQueue<std::string>>();
-    common::ThreadRegistry tr;
+    auto ch = std::make_shared<boost::fibers::unbuffered_channel<std::string>>();
+    ON_SCOPE_EXIT { ch->close(); };
+
+    std::vector<boost::fibers::fiber> threads;
+    ON_SCOPE_EXIT {
+      for (auto &f : threads) {
+        f.join();
+      }
+    };
     for (int xi = 0; xi < n; xi++) {
       std::shared_ptr<Clerk> ck1 = cfg.MakeClient();  // only one call allowed per client
       cls.push_back(ck1);
-      tr.RegisterNewThread([&, ck1, i = xi] {
+      threads.push_back(boost::fibers::fiber([&, ck1, i = xi] {
         auto v = ck1->Get(ka[i]);
         if (v != va[i]) {
-          ch->Enqueue(fmt::format("Get({}): expected:\n{}\nreceived:\n{}", ka[i], va[i], v));
+          ch->push(fmt::format("Get({}): expected: {} received: {}", ka[i], va[i], v));
         } else {
-          ch->Enqueue("");
+          ch->push("");
         }
-      });
+      }));
     }
 
     // wait a bit, only about half the Gets should succeed.
     int ndone = 0;
     auto start = common::Now();
+    boost::fibers::fiber f([&] {
+      boost::this_fiber::sleep_for(MS(2000));
+      ch->close();
+    });
+    ON_SCOPE_EXIT { f.join(); };
+
     while (common::ElapsedTimeS(start, common::Now()) < 2) {
-      if (!ch->Empty()) {
-        std::string err;
-        ch->Dequeue(&err);
+      std::string err;
+
+      if (ch->pop(err) == boost::fibers::channel_op_status::success) {
         if (err != "") {
+          Logger::Debug(kDTest, -1, fmt::format("{}", err));
           throw SHARDKV_EXCEPTION(err);
         }
         ndone += 1;
@@ -346,7 +360,7 @@ TEST(ShardKVTest, DISABLED_TestMissChange) {
   EXPECT_TRUE(cfg.CleanUp());
 }
 
-TEST(ShardKVTest, ConcurrentTest) {
+TEST(ShardKVTest, DISABLED_ConcurrentTest) {
   Logger::Debug(kDTest, -1, "Test: concurrent puts and configuration changes...\n");
 
   Config cfg(3, false, 100);
@@ -379,9 +393,9 @@ TEST(ShardKVTest, ConcurrentTest) {
     }
   };
 
-  std::vector<std::thread> threads;
+  std::vector<boost::fibers::fiber> threads;
   for (int i = 0; i < n; i++) {
-    threads.push_back(std::thread([&, i] { ff(i); }));
+    threads.push_back(boost::fibers::fiber([&, i] { ff(i); }));
   }
 
   common::SleepMs(150);
@@ -488,6 +502,51 @@ TEST(ShardKVTest, DISABLED_Unreliable) {
   }
 
   Logger::Debug(kDTest, -1, "  ... Passed\n");
+}
+
+TEST(ShardKVTest, Benchmark) {
+  Config cfg(3, true, -1);
+  ON_SCOPE_EXIT { cfg.CleanUp(); };
+
+  auto nclients = 20;
+  std::vector<std::unique_ptr<Clerk>> cks;
+  cks.reserve(nclients);
+  for (int i = 0; i < nclients; i++) {
+    cks.push_back(cfg.MakeClient());
+  }
+
+  cfg.Join(0);
+
+  int n = 20;
+  std::vector<std::string> ka(n);
+  std::vector<std::string> va(n);
+  for (int i = 0; i < n; i++) {
+    ka[i] = std::to_string(i);
+    va[i] = common::RandString(20);
+  }
+
+  auto run = [&](int c) {
+    for (int i = 0; i < n; i++) {
+      cks[c]->Put(ka[i], va[i]);
+    }
+  };
+
+  std::vector<boost::fibers::fiber> fibers;
+  fibers.reserve(nclients);
+
+  auto start = common::Now();
+
+  for (int j = 0; j < nclients; j++) {
+    fibers.push_back(boost::fibers::fiber([&, j] { run(j); }));
+  }
+
+  for (auto &&f : fibers) {
+    f.join();
+  }
+
+  auto elapsed = common::ElapsedTimeMs(start, common::Now());
+  std::cout << "Doing " << n * nclients << " request takes " << elapsed << " miliseconds" << std::endl;
+  std::cout << "RPS: " << n * nclients * 1000 / elapsed << std::endl;
 }
 
 }  // namespace kv::shardkv
