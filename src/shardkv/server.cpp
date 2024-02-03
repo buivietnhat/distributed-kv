@@ -2,7 +2,7 @@
 
 namespace kv::shardkv {
 
-kv::shardkv::ShardKV::ShardKV(std::vector<network::ClientEnd *> servers, int me,
+ShardKV::ShardKV(std::vector<network::ClientEnd *> servers, int me,
                               std::shared_ptr<storage::PersistentInterface> persister, int maxraftstate, int gid,
                               std::vector<network::ClientEnd *> ctrlers,
                               std::function<network::ClientEnd *(std::string)> make_end)

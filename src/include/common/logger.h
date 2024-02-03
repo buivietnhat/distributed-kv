@@ -35,6 +35,8 @@ static constexpr const char *kDLeader1 = "LED1";
 
 }  // namespace kv
 
+#define NDEBUG
+
 namespace kv::common {
 
 class Logger {

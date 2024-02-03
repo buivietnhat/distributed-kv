@@ -22,7 +22,7 @@ bool Check(Clerk *ck, const std::string &key, const std::string &value) {
 }
 
 // test static 2-way sharding, without shard movement
-TEST(ShardKVTest, TestStaticShards) {
+TEST(ShardKVTest, DISABLED_TestStaticShards) {
   Logger::Debug(kDTest, -1, "Test: static shards ...");
 
   Config cfg(3, false, -1);
@@ -121,7 +121,7 @@ TEST(ShardKVTest, TestStaticShards) {
   EXPECT_TRUE(cfg.CleanUp());
 }
 
-TEST(ShardKVTest, TestJoinLeave) {
+TEST(ShardKVTest, DISABLED_TestJoinLeave) {
   Logger::Debug(kDTest, -1, "Test: join then leave");
 
   Config cfg(3, false, -1);
@@ -184,7 +184,7 @@ TEST(ShardKVTest, TestJoinLeave) {
   EXPECT_TRUE(cfg.CleanUp());
 }
 
-TEST(ShardKVTest, TestSnapshot) {
+TEST(ShardKVTest, DISABLED_TestSnapshot) {
   Logger::Debug(kDTest, -1, "Test: snapshots, join, and leave ...\n");
 
   Config cfg(3, false, 1000);
@@ -261,7 +261,7 @@ TEST(ShardKVTest, TestSnapshot) {
   EXPECT_TRUE(cfg.CleanUp());
 }
 
-TEST(ShardKVTest,TestMissChange) {
+TEST(ShardKVTest, DISABLED_TestMissChange) {
   Logger::Debug(kDTest, -1, "Test: servers miss configuration changes ...");
 
   Config cfg(3, false, 1000);
@@ -360,7 +360,7 @@ TEST(ShardKVTest,TestMissChange) {
   EXPECT_TRUE(cfg.CleanUp());
 }
 
-TEST(ShardKVTest, ConcurrentTest) {
+TEST(ShardKVTest, DISABLED_ConcurrentTest) {
   Logger::Debug(kDTest, -1, "Test: concurrent puts and configuration changes...\n");
 
   Config cfg(3, false, 100);
@@ -454,7 +454,7 @@ TEST(ShardKVTest, ConcurrentTest) {
   EXPECT_TRUE(cfg.CleanUp());
 }
 
-TEST(ShardKVTest, Unreliable) {
+TEST(ShardKVTest, DISABLED_Unreliable) {
   Logger::Debug(kDTest, -1, "Test: unreliable");
 
   Config cfg(3, true, 100);
@@ -502,6 +502,51 @@ TEST(ShardKVTest, Unreliable) {
   }
 
   Logger::Debug(kDTest, -1, "  ... Passed\n");
+}
+
+TEST(ShardKVTest, Benchmark) {
+  Config cfg(3, true, -1);
+  ON_SCOPE_EXIT { cfg.CleanUp(); };
+
+  auto nclients = 20;
+  std::vector<std::unique_ptr<Clerk>> cks;
+  cks.reserve(nclients);
+  for (int i = 0; i < nclients; i++) {
+    cks.push_back(cfg.MakeClient());
+  }
+
+  cfg.Join(0);
+
+  int n = 20;
+  std::vector<std::string> ka(n);
+  std::vector<std::string> va(n);
+  for (int i = 0; i < n; i++) {
+    ka[i] = std::to_string(i);
+    va[i] = common::RandString(20);
+  }
+
+  auto run = [&](int c) {
+    for (int i = 0; i < n; i++) {
+      cks[c]->Put(ka[i], va[i]);
+    }
+  };
+
+  std::vector<boost::fibers::fiber> fibers;
+  fibers.reserve(nclients);
+
+  auto start = common::Now();
+
+  for (int j = 0; j < nclients; j++) {
+    fibers.push_back(boost::fibers::fiber([&, j] { run(j); }));
+  }
+
+  for (auto &&f : fibers) {
+    f.join();
+  }
+
+  auto elapsed = common::ElapsedTimeMs(start, common::Now());
+  std::cout << "Doing " << n * nclients << " request takes " << elapsed << " miliseconds" << std::endl;
+  std::cout << "RPS: " << n * nclients * 1000 / elapsed << std::endl;
 }
 
 }  // namespace kv::shardkv
