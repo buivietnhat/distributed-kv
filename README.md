@@ -16,7 +16,7 @@ In addition, the system should be designed to function properly even in the pres
 - **Performance**: While not aiming for blazingly fast speed, the system should deliver sufficiently good performance to be viable for real-world production use cases.
 
 ## Overal Architecture
-![Overal Architecture](docs/img/overal.png)
+![Overal Architecture](docs/img/overal.jpg)
 
 The system comprises different components, with each group employing a replication strategy as a replicated state machine, utilizing [**Raft**](https://raft.github.io/) as a consensus protocol:
 - **Shard Controller**: Responsible for configuring shard information, it supports various types of queries for retrieving, adding, and removing new groups of replicas.
