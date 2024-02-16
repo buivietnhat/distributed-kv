@@ -30,7 +30,7 @@ All tests can be located in the `test` folder. The system incorporates mock netw
 ## Benchmark
 I have benchmarked the system's performance under my simulated network, including simulated disk writes by writing to memory. This allowed me to observe how fast the Raft implementation is.
 
-The benchmarking device is a laptop with 8GB of RAM and an 8-core CPU. The system consists of 3 replicas, and here are the results
+The benchmarking device is a laptop with 8GB of RAM and an 8-core CPU. The system consists of 3 replicas, the benchmark code located in [benchmark](test/raft/log_test.cpp) and here are the results
 ```angular2html
 Doing 1000 request takes 103.236 miliseconds
 Requests/Second: 9686.54
